@@ -1,0 +1,20 @@
+# Dependencias y build
+node_modules/
+.next/
+out/
+
+# Variables de entorno (para la v2: Supabase, etc.)
+.env
+.env*.local
+
+# Logs
+npm-debug.log*
+
+# Sistema / editor
+.DS_Store
+*:Zone.Identifier
+.vscode/
+.idea/
+
+# Vercel
+.vercel
