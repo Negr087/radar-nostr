@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import Avatar from "./Avatar";
 import Feed from "./Feed";
 
-// Panel lateral (abajo en celular) con el detalle de una app: actividad y últimos eventos.
+// Side panel (bottom sheet on mobile) with an app's details: activity and latest events.
 export default function AppDetail({ appKey, apps, getApp, getRecent, getCounts, profiles, onClose }) {
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
@@ -34,16 +34,16 @@ export default function AppDetail({ appKey, apps, getApp, getRecent, getCounts, 
               </a>
             )}
           </div>
-          <button type="button" className="detail-close" onClick={onClose} aria-label="Cerrar">
+          <button type="button" className="detail-close" onClick={onClose} aria-label="Close">
             ×
           </button>
         </header>
         <div className="detail-stats">
-          <div><b>{live}</b><span>últimos 5 min</span></div>
-          <div><b>{hour}</b><span>última hora</span></div>
+          <div><b>{live}</b><span>last 5 min</span></div>
+          <div><b>{hour}</b><span>last hour</span></div>
           <div><b>{day}</b><span>24 h</span></div>
         </div>
-        <h3>Últimos eventos</h3>
+        <h3>Latest events</h3>
         <Feed feed={getRecent(appKey)} profiles={profiles} getApp={getApp} />
       </aside>
     </div>

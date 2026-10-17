@@ -2,7 +2,7 @@
 
 import { CATEGORIES } from "@/lib/kinds";
 
-// Barras apiladas por categoría, un bloque por minuto (últimos 30 min).
+// Stacked bars by category, one column per minute (last 30 min).
 export default function Pulse({ pulse, filter, onFilter }) {
   const max = Math.max(1, ...pulse.map((p) => p.total));
   const totals = {};
@@ -12,7 +12,7 @@ export default function Pulse({ pulse, filter, onFilter }) {
     <div className="pulse">
       <div className="pulse-bars">
         {pulse.map((p) => (
-          <div key={p.minute} className="pulse-col" title={`${new Date(p.minute).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })} · ${p.total} eventos`}>
+          <div key={p.minute} className="pulse-col" title={`${new Date(p.minute).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })} · ${p.total} events`}>
             {Object.keys(CATEGORIES).map((c) =>
               p.byCat[c] ? (
                 <div

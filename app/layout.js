@@ -1,8 +1,8 @@
 import "./globals.css";
 
-const description = "Actividad en vivo de las apps y clientes de Nostr: qué se usa, ahora.";
+const description = "Live activity of Nostr apps and clients: what people are using, right now.";
 
-// La imagen de vista previa sale de app/opengraph-image.js (Next la enlaza sola).
+// The preview image comes from app/opengraph-image.js (Next links it automatically).
 export const metadata = {
   metadataBase: new URL("https://radarnostr.vercel.app"),
   title: "Radar Nostr",
@@ -12,7 +12,7 @@ export const metadata = {
     description,
     url: "/",
     siteName: "Radar Nostr",
-    locale: "es_AR",
+    locale: "en_US",
     type: "website",
   },
   twitter: {
@@ -24,7 +24,7 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="es">
+    <html lang="en">
       <body>{children}</body>
     </html>
   );

@@ -47,7 +47,7 @@ main { max-width: 1320px; margin: 0 auto; padding: 20px 16px 40px; display: flex
 .panel h2 small { color: var(--muted); font-weight: 400; font-size: 12px; }
 .empty { color: var(--muted); padding: 40px 12px; text-align: center; line-height: 1.6; }
 
-/* Bubbles: la posición y el tamaño los escribe la simulación de Bubbles.js */
+/* Bubbles: position and size are written by the simulation in Bubbles.js */
 .bubbles { position: relative; height: 460px; overflow: hidden; }
 .bubbles .empty { position: absolute; inset: 0; display: grid; place-items: center; }
 .bubble-pos { position: absolute; top: 0; left: 0; width: 0; height: 0; will-change: transform; }
@@ -59,7 +59,7 @@ main { max-width: 1320px; margin: 0 auto; padding: 20px 16px 40px; display: flex
 .bubble-logo { width: 42%; aspect-ratio: 1; container-type: inline-size; display: block; }
 .bubble-name { font-size: clamp(9px, 12cqw, 14px); max-width: 82%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
 @container (max-width: 64px) { .bubble-name { display: none; } .bubble-logo { width: 56%; } }
-/* El contador va afuera del círculo (no lo recorta el overflow) */
+/* The counter sits outside the circle (so overflow doesn't clip it) */
 .bubble-count { position: absolute; top: 2%; right: 2%; pointer-events: none; font-family: "JetBrains Mono", monospace; font-size: 10px; background: var(--orange); color: #111; border-radius: 999px; padding: 1px 6px; font-weight: 700; }
 @media (prefers-reduced-motion: reduce) { .bubble.hot { animation: none; } .feed-item { animation: none; } }
 
@@ -104,7 +104,7 @@ main { max-width: 1320px; margin: 0 auto; padding: 20px 16px 40px; display: flex
 .rank-bar span { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.5s ease; }
 .rank-count { font-family: "JetBrains Mono", monospace; font-size: 12px; text-align: right; }
 
-/* Detalle de app */
+/* App detail */
 .detail-backdrop { position: fixed; inset: 0; background: #05050acc; display: flex; justify-content: flex-end; z-index: 10; animation: fade 0.2s ease; }
 @keyframes fade { from { opacity: 0; } }
 .detail { width: min(440px, 100%); height: 100%; background: var(--panel); border-left: 1px solid var(--line); padding: 18px 16px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; animation: enter 0.25s ease; }
@@ -121,7 +121,7 @@ main { max-width: 1320px; margin: 0 auto; padding: 20px 16px 40px; display: flex
 .detail h3 { margin: 0; font-size: 13px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
 .detail .feed { max-height: none; }
 
-/* Celular */
+/* Mobile */
 @media (max-width: 900px) {
   .grid-bottom { grid-template-columns: 1fr; }
 }

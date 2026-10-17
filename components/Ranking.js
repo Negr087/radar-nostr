@@ -4,12 +4,12 @@ import { useState } from "react";
 import Avatar from "./Avatar";
 
 const TABS = [
-  { id: "hour", label: "Última hora" },
+  { id: "hour", label: "Last hour" },
   { id: "day", label: "24 h" },
 ];
 
-// Top 10 de apps por actividad. Se cuenta en este navegador mientras la página
-// está abierta, así que "24 h" es en realidad "lo que viste en las últimas 24 h".
+// Top 10 apps by activity. Counted in this browser while the page is open,
+// so "24 h" really means "what you saw in the last 24 h".
 export default function Ranking({ ranking, onSelect }) {
   const [tab, setTab] = useState("hour");
   const rows = ranking[tab];
@@ -31,7 +31,7 @@ export default function Ranking({ ranking, onSelect }) {
         ))}
       </div>
       {!rows.length ? (
-        <div className="empty">Juntando datos… el ranking se arma con lo que llega en vivo.</div>
+        <div className="empty">Collecting data… the ranking builds up from live events.</div>
       ) : (
         <ol className="rank-list">
           {rows.map((r, i) => (
@@ -43,7 +43,7 @@ export default function Ranking({ ranking, onSelect }) {
                 <span className="rank-bar">
                   <span style={{ width: `${(r.count / max) * 100}%` }} />
                 </span>
-                <span className="rank-count">{r.count.toLocaleString("es-AR")}</span>
+                <span className="rank-count">{r.count.toLocaleString("en-US")}</span>
               </button>
             </li>
           ))}

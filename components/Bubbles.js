@@ -4,11 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import Avatar from "./Avatar";
 
 const MAX_BUBBLES = 40;
-const GAP = 4; // separación mínima entre burbujas (px)
-const SLEEP_PX = 0.05; // si nada se mueve más que esto, la simulación se duerme
+const GAP = 4; // minimum gap between bubbles (px)
+const SLEEP_PX = 0.05; // if nothing moves more than this, the simulation goes to sleep
 
-// Radio de cada burbuja: el área es proporcional a la actividad, y todo se escala
-// para ocupar ~55% de la caja. Así entra igual en escritorio y en celular.
+// Radius of each bubble: area is proportional to activity, and everything is scaled
+// to fill ~55% of the box. That way it fits the same on desktop and mobile.
 function targetRadii(apps, w, h) {
   if (!w || !h) return new Map();
   const max = Math.max(1, ...apps.map((a) => a.count));
@@ -21,11 +21,11 @@ function targetRadii(apps, w, h) {
   return new Map(raw.map(([key, r]) => [key, r * k]));
 }
 
-// Una burbuja por app: el tamaño es la actividad de los últimos 5 min,
-// y "late" si tuvo un evento en los últimos 3 segundos.
-// La posición la maneja una simulación simple (atracción al centro + choques),
-// escrita directo al DOM en cada frame para no re-renderizar React 60 veces por segundo.
-// Cuando todo se acomoda se duerme (si no, tiembla); se despierta si cambia algo.
+// One bubble per app: size is activity over the last 5 min,
+// and it "beats" if it had an event in the last 3 seconds.
+// Position comes from a simple simulation (pull to center + collisions),
+// written straight to the DOM each frame so React doesn't re-render 60 times a second.
+// Once everything settles it sleeps (otherwise it jitters); it wakes up when something changes.
 export default function Bubbles({ apps, onSelect, selected }) {
   const boxRef = useRef(null);
   const nodes = useRef(new Map()); // key -> {x, y, r, target, el}
@@ -42,7 +42,7 @@ export default function Bubbles({ apps, onSelect, selected }) {
     return () => ro.disconnect();
   }, []);
 
-  // Sincroniza los nodos con la lista: altas en un borde al azar, bajas, radio objetivo.
+  // Sync nodes with the list: new ones spawn at a random edge, removals, target radius.
   const targets = targetRadii(list, size.w, size.h);
   for (const [key, target] of targets) {
     const n = nodes.current.get(key);
@@ -78,14 +78,14 @@ export default function Bubbles({ apps, onSelect, selected }) {
       const ns = [...nodes.current.values()];
       if (awake.current && w && h) {
         let moved = 0;
-        // Con movimiento reducido, resolvemos la posición de una sin animar.
+        // With reduced motion, solve the layout in one go without animating.
         for (let iter = 0; iter < (reduced ? 60 : 1); iter++) {
           for (const n of ns) {
             n.px = n.x;
             n.py = n.y;
             n.r += (n.target - n.r) * (reduced ? 1 : 0.15);
             if (Math.abs(n.target - n.r) < 0.1) n.r = n.target;
-            // Atracción al centro, más fuerte en vertical para aprovechar el ancho.
+            // Pull to center, stronger vertically to use the width.
             n.x += (w / 2 - n.x) * 0.01;
             n.y += (h / 2 - n.y) * 0.018;
           }
@@ -99,7 +99,7 @@ export default function Bubbles({ apps, onSelect, selected }) {
                 const dist = Math.hypot(dx, dy);
                 const overlap = a.r + b.r + GAP - dist;
                 if (overlap > 0) {
-                  // La más chica se mueve más: las grandes quedan ancladas al centro.
+                  // The smaller one moves more: big bubbles stay anchored to the center.
                   const push = overlap / dist;
                   const wa = b.r / (a.r + b.r);
                   a.x -= dx * push * wa;
@@ -137,8 +137,8 @@ export default function Bubbles({ apps, onSelect, selected }) {
     <div className="bubbles" ref={boxRef}>
       {!list.length && (
         <div className="empty">
-          Escuchando relays… las apps que firman sus eventos con el tag <code>client</code> van a
-          aparecer acá.
+          Listening to relays… apps that sign their events with the <code>client</code> tag will
+          show up here.
         </div>
       )}
       {list.map((a) => {
@@ -155,7 +155,7 @@ export default function Bubbles({ apps, onSelect, selected }) {
             <button
               type="button"
               className={`bubble ${hot ? "hot" : ""} ${selected === a.key ? "selected" : ""}`}
-              title={`${a.name} · ${a.count} eventos en 5 min`}
+              title={`${a.name} · ${a.count} events in 5 min`}
               onClick={() => onSelect?.(a.key)}
             >
               <span className="bubble-logo">

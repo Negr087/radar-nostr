@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 
-// Ícono de la pestaña: el punto verde "en vivo" con un anillo de radar.
+// Tab icon: the green "live" dot with a radar ring.
 export const size = { width: 64, height: 64 };
 export const contentType = "image/png";
 

@@ -1,13 +1,13 @@
 import { ImageResponse } from "next/og";
 
-// Imagen de vista previa al compartir el link (Nostr, X, WhatsApp…).
-// Se genera en el build con el mismo estilo del sitio.
+// Preview image shown when the link is shared (Nostr, X, WhatsApp…).
+// Generated at build time with the same look as the site.
 
-export const alt = "Radar Nostr: qué apps de Nostr se están usando, ahora";
+export const alt = "Radar Nostr: which Nostr apps people are using, right now";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-// Burbujas decorativas: [x, y, diámetro, color, letra]. Colores de las categorías.
+// Decorative bubbles: [x, y, diameter, color, letter]. Category colors.
 const BUBBLES = [
   [760, 70, 250, "#a78bfa", "A"],
   [1000, 210, 170, "#f7931a", "N"],
@@ -95,10 +95,10 @@ export default function OpengraphImage() {
             </div>
           </div>
           <div style={{ fontSize: 38, color: "#c3c3d4", lineHeight: 1.3 }}>
-            Qué apps de Nostr se están usando, ahora.
+            Which Nostr apps people are using, right now.
           </div>
           <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
-            {["En vivo", "Ranking", "Zaps"].map((t) => (
+            {["Live", "Ranking", "Zaps"].map((t) => (
               <div
                 key={t}
                 style={{

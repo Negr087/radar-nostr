@@ -8,8 +8,8 @@ function hue(str = "") {
   return h;
 }
 
-// `src` puede ser una URL o una lista de candidatas: si una falla, prueba la siguiente.
-// `size` en px, o un largo CSS ("100%") para que siga al contenedor.
+// `src` can be a URL or a list of candidates: if one fails, it tries the next.
+// `size` in px, or a CSS length ("100%") to follow the container.
 export default function Avatar({ src, seed, label, size = 32, rounded = "50%" }) {
   const [broken, setBroken] = useState(() => new Set());
   const style = { width: size, height: size, borderRadius: rounded, flexShrink: 0 };
@@ -38,7 +38,7 @@ export default function Avatar({ src, seed, label, size = 32, rounded = "50%" })
         placeItems: "center",
         background: `hsl(${hue(seed || label)} 45% 32%)`,
         color: "#fff",
-        // cqw: relativo al contenedor (.bubble-logo declara container-type).
+        // cqw: relative to the container (.bubble-logo declares container-type).
         fontSize: typeof size === "number" ? size * 0.42 : "42cqw",
         fontWeight: 700,
       }}

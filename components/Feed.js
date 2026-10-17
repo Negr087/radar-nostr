@@ -17,7 +17,7 @@ export default function Feed({ feed, profiles, getApp, filter }) {
   const items = filter ? feed.filter((f) => f.cat === filter) : feed;
 
   if (!items.length) {
-    return <div className="empty">Esperando actividad…</div>;
+    return <div className="empty">Waiting for activity…</div>;
   }
 
   return (
@@ -25,7 +25,7 @@ export default function Feed({ feed, profiles, getApp, filter }) {
       {items.map((it) => {
         const p = profiles[it.actor] || {};
         const app = getApp(it.appKey);
-        const cat = CATEGORIES[it.cat] || CATEGORIES.otro;
+        const cat = CATEGORIES[it.cat] || CATEGORIES.other;
         const appName = app?.name || it.appName;
         return (
           <li key={it.id} className="feed-item" style={{ "--cat": cat.color }}>
@@ -48,10 +48,10 @@ export default function Feed({ feed, profiles, getApp, filter }) {
                         size={16}
                         rounded="4px"
                       />
-                      {it.zapTo ? appName : `en ${appName}`}
+                      {it.zapTo ? appName : `via ${appName}`}
                     </span>
                   )}
-                  {!appName && it.hint && <span className="hint">¿{it.hint}?</span>}
+                  {!appName && it.hint && <span className="hint">{it.hint}?</span>}
                 </div>
                 {it.preview && <div className="preview">{it.preview}</div>}
               </div>

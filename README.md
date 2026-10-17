@@ -1,8 +1,10 @@
 # Radar Nostr
 
-Feed en vivo de qué apps/clientes de Nostr se están usando, minuto a minuto. Estilo zaplife.lol, pero de apps.
+Live feed of which Nostr apps/clients people are using, minute by minute. Like zaplife.lol, but for apps.
 
-## Correr
+Live at **[radarnostr.vercel.app](https://radarnostr.vercel.app)**.
+
+## Run
 
 ```bash
 npm install
@@ -10,36 +12,37 @@ npm run dev
 # http://localhost:3000
 ```
 
-Deploy: tal cual a Vercel (todo corre en el navegador, no hay backend).
+Deploy: as-is to Vercel (everything runs in the browser, there's no backend). Every push to `main` deploys.
 
-## Cómo detecta la actividad
+## How it detects activity
 
-1. **Tag `client` (NIP-89)**: si el evento lo trae, se atribuye a esa app. Si apunta a un `31990:pubkey:d`, se baja la ficha de la app (nombre, logo, web).
-2. **Tipo de evento (kind)**: si no hay tag, se clasifica por categoría (foto, artículo, live, git, DVM…). Ver `lib/kinds.js`.
-3. **Ecosistema**: apps nuevas (kind 31990 publicados en vivo) y zaps a npubs de apps conocidas.
-4. **Zaps**: el recibo (9735) lo firma el servidor Lightning, así que la app se lee del pedido de zap que va adentro (tag `description`). Un zap cuenta para la app que lo recibe o, si va a una persona, para la app desde la que se mandó. Los que no tienen ninguna de las dos se descartan.
+1. **`client` tag (NIP-89)**: if the event has one, it's attributed to that app. If it points to a `31990:pubkey:d`, the app listing is fetched (name, logo, website).
+2. **Event kind**: with no tag, the event is classified by category (photo, article, live, git, DVM…). See `lib/kinds.js`.
+3. **Ecosystem**: new apps (kind 31990 published live) and zaps to npubs of known apps.
+4. **Zaps**: the receipt (9735) is signed by the Lightning server, so the app is read from the zap request inside it (`description` tag). A zap counts for the app that receives it or, if it goes to a person, for the app it was sent from. Zaps with neither are dropped.
 
-Al arrancar precarga ~500 fichas 31990 (para reconocer zaps a apps) y trae los últimos 5 minutos de eventos, así la pantalla no empieza vacía.
+On startup it preloads ~500 kind 31990 listings (to recognize zaps to apps) and fetches the last 5 minutes of events, so the screen doesn't start empty.
 
-## Archivos
+## Files
 
-- `lib/useRadar.js`: conexión a relays (NDK), parseo, agregados, perfiles en lote. Lo importante está acá.
-- `lib/kinds.js`: mapa kind -> categoría/verbo. Agregá kinds acá.
-- `lib/bots.js`: detección de bots (por nombre de app, por perfil `"bot": true` y por ritmo de publicación). Sus eventos no cuentan en ningún lado.
-- `lib/knownApps.js`: apps conocidas (nombre + web, el logo sale del favicon) y normalización de nombres para que "Primal Android" y "Primal Web" sean una sola burbuja. Agregá apps acá.
-- `components/Bubbles.js`: burbujas por app (área = actividad últimos 5 min, laten con cada evento). Se acomodan solas con una simulación chica (atracción al centro + choques) que se duerme cuando todo está quieto. Tocar una abre el detalle.
-- `components/AppDetail.js`: panel con el detalle de una app (web, actividad 5 min / hora / 24 h, últimos eventos).
-- `components/Ranking.js`: top 10 de la última hora y de 24 h. Se cuenta en tramos de 10 min y se guarda en `localStorage`, así que solo refleja lo que este navegador vio con la página abierta.
-- `components/Feed.js`: ticker en vivo (cada item abre el evento en njump.me).
-- `components/Pulse.js`: barras por minuto apiladas por categoría; la leyenda filtra el feed.
+- `lib/useRadar.js`: relay connection (NDK), parsing, aggregates, batched profiles. The core lives here.
+- `lib/kinds.js`: kind -> category/verb map. Add kinds here.
+- `lib/bots.js`: bot detection (by app name, by `"bot": true` profile, and by posting rate). Their events don't count anywhere.
+- `lib/knownApps.js`: known apps (name, website and verified icon) and name normalization so "Primal Android" and "Primal Web" are a single bubble. Add apps here.
+- `components/Bubbles.js`: one bubble per app (area = activity over the last 5 min, beats on every event). They arrange themselves with a small simulation (pull to center + collisions) that sleeps when everything is still. Tapping one opens its details.
+- `components/AppDetail.js`: panel with an app's details (website, activity over 5 min / hour / 24 h, latest events).
+- `components/Ranking.js`: top 10 for the last hour and 24 h. Counted in 10 min buckets and stored in `localStorage`, so it only reflects what this browser saw while the page was open.
+- `components/Feed.js`: live ticker (each item opens the event on njump.me).
+- `components/Pulse.js`: per-minute bars stacked by category; the legend filters the feed.
+- `app/opengraph-image.js` / `app/icon.js`: share preview image and tab icon, generated at build time.
 
-## Ajustes rápidos
+## Quick tweaks
 
-- Relays: `RELAYS` (escucha en vivo) y `PROFILE_RELAYS` (perfiles) en `lib/useRadar.js`.
-- Ventana de burbujas / largo del feed: constantes al principio de `lib/useRadar.js`.
-- Las reacciones (kind 7) están excluidas porque inundan todo; agregalas a `WATCHED_KINDS` si las querés.
+- Relays: `RELAYS` (live listening) and `PROFILE_RELAYS` (profiles) in `lib/useRadar.js`.
+- Bubble window / feed length: constants at the top of `lib/useRadar.js`.
+- Reactions (kind 7) are excluded because they flood everything; add them to `WATCHED_KINDS` if you want them.
 
-## Próximos pasos (v2)
+## Next steps (v2)
 
-- Worker en Node en el nodo Umbrel escuchando 24/7 + Supabase para rankings diarios/semanales e historial.
-- Ranking real (no por navegador) cuando exista el worker + Supabase.
+- Node worker on the Umbrel node listening 24/7 + Supabase for daily/weekly rankings and history.
+- Real ranking (not per browser) once the worker + Supabase exist.
