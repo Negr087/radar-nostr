@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { ImageResponse } from "next/og";
 
 // Preview image shown when the link is shared (Nostr, X, WhatsApp…).
@@ -7,18 +9,27 @@ export const alt = "Radar Nostr: which Nostr apps people are using, right now";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-// Decorative bubbles: [x, y, diameter, color, letter]. Category colors.
+// App bubbles: [x, y, diameter, logo]. Logos live in assets/og (192 px copies of each
+// app's official icon) so the build doesn't depend on other sites being up.
 const BUBBLES = [
-  [760, 70, 250, "#a78bfa", "A"],
-  [1000, 210, 170, "#f7931a", "N"],
-  [720, 330, 190, "#22d3ee", "P"],
-  [930, 400, 130, "#f472b6", "D"],
-  [1060, 60, 110, "#34d399", "W"],
-  [640, 220, 100, "#fbbf24", "Y"],
-  [1080, 420, 90, "#60a5fa", "O"],
+  [760, 70, 250, "amethyst"],
+  [1000, 210, 170, "nostrich"],
+  [720, 330, 190, "primal"],
+  [930, 400, 130, "damus"],
+  [1060, 60, 110, "wisp"],
+  [640, 220, 100, "zapstore"],
+  [1080, 420, 90, "divine"],
 ];
 
-export default function OpengraphImage() {
+async function logo(name) {
+  const png = await readFile(join(process.cwd(), "assets/og", `${name}.png`));
+  return `data:image/png;base64,${png.toString("base64")}`;
+}
+
+export default async function OpengraphImage() {
+  const logos = Object.fromEntries(
+    await Promise.all(BUBBLES.map(async ([, , , name]) => [name, await logo(name)]))
+  );
   return new ImageResponse(
     (
       <div
@@ -34,9 +45,9 @@ export default function OpengraphImage() {
           fontFamily: "sans-serif",
         }}
       >
-        {BUBBLES.map(([x, y, d, color, letter]) => (
+        {BUBBLES.map(([x, y, d, name]) => (
           <div
-            key={letter}
+            key={name}
             style={{
               position: "absolute",
               left: x,
@@ -51,22 +62,12 @@ export default function OpengraphImage() {
               justifyContent: "center",
             }}
           >
-            <div
-              style={{
-                width: d * 0.42,
-                height: d * 0.42,
-                borderRadius: d * 0.12,
-                background: color,
-                color: "#111",
-                fontSize: d * 0.22,
-                fontWeight: 800,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              {letter}
-            </div>
+            <img
+              src={logos[name]}
+              width={d * 0.5}
+              height={d * 0.5}
+              style={{ borderRadius: d * 0.12 }}
+            />
           </div>
         ))}
 
