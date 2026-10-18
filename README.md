@@ -41,6 +41,17 @@ On startup it preloads ~500 kind 31990 listings (to recognize zaps to apps) and 
 - `components/Pulse.js`: per-minute bars stacked by category; the legend filters the feed.
 - `app/opengraph-image.js` / `app/icon.js`: share preview image and tab icon, generated at build time.
 
+## Worker (v2)
+
+`worker/` listens to the relays 24/7 with the same engine as the page and stores aggregated
+counts in Supabase every minute (schema in `supabase/schema.sql`). Events wait 5 minutes
+before being counted, so accounts caught by the rate-based bot filter don't make it in.
+
+```bash
+cp .env.example .env   # then fill in SUPABASE_SECRET_KEY
+npm run worker         # DRY_RUN=1 npm run worker prints what it would send, writes nothing
+```
+
 ## Tests
 
 ```bash

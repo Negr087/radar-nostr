@@ -7,7 +7,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node --test"
+    "test": "node --test",
+    "worker": "node --env-file-if-exists=.env worker/index.js"
   },
   "dependencies": {
     "@nostr-dev-kit/ndk": "^2.14.0",
