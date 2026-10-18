@@ -52,6 +52,18 @@ cp .env.example .env   # then fill in SUPABASE_SECRET_KEY
 npm run worker         # DRY_RUN=1 npm run worker prints what it would send, writes nothing
 ```
 
+### Running it 24/7 (Umbrel or any Docker host)
+
+```bash
+git clone https://github.com/Negr087/radar-nostr.git && cd radar-nostr
+cp .env.example .env && nano .env && chmod 600 .env   # paste the secret key
+docker compose -f worker/docker-compose.yml up -d --build
+docker logs -f radar-nostr-worker                     # first "flushed" after ~6 min
+```
+
+Update: `git pull && docker compose -f worker/docker-compose.yml up -d --build`.
+Run only one worker at a time: two would count every event twice.
+
 ## Tests
 
 ```bash

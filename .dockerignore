@@ -1,0 +1,10 @@
+# Only lib/ and worker/ go into the worker image; skip the rest of the build context.
+node_modules
+.next
+.git
+.env
+.env*.local
+assets
+app
+components
+test

@@ -1,0 +1,22 @@
+# Runs the worker 24/7. From the repo root:
+#   docker compose -f worker/docker-compose.yml up -d --build
+# Needs a .env in the repo root with SUPABASE_URL and SUPABASE_SECRET_KEY.
+services:
+  radar-worker:
+    build:
+      context: ..
+      dockerfile: worker/Dockerfile
+    image: radar-nostr-worker
+    container_name: radar-nostr-worker
+    env_file: ../.env
+    # Back up after a crash and after the Umbrel reboots, unless stopped by hand.
+    restart: unless-stopped
+    # docker stop sends SIGTERM; give the worker time for its final flush.
+    stop_grace_period: 30s
+    mem_limit: 512m
+    # Keep logs from filling the disk: at most 3 files of 10 MB.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
