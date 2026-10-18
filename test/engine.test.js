@@ -41,7 +41,7 @@ test("normalizeName merges spellings of the same app", () => {
 });
 
 test("bot names and profiles", () => {
-  for (const n of ["masto-bot", "orig-nexus9-t37", "zhenguojian-app", "PosterChan AI", "Mostr"]) {
+  for (const n of ["masto-bot", "orig-nexus9-t37", "zhenguojian-app", "zhenguo-web-watch", "PosterChan AI", "Mostr"]) {
     assert.equal(isBotClient(n), true, n);
   }
   for (const n of ["Amethyst", "Primal", "Zeus", "Nostrich"]) assert.equal(isBotClient(n), false, n);
