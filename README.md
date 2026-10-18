@@ -25,7 +25,10 @@ On startup it preloads ~500 kind 31990 listings (to recognize zaps to apps) and 
 
 ## Files
 
-- `lib/useRadar.js`: relay connection (NDK), parsing, aggregates, batched profiles. The core lives here.
+- `lib/engine.js`: the core, shared by the page and the worker. Classifies each event (which app, bot or not, zap amount) with no React and no database.
+- `lib/relays.js`: relay lists (live, profiles, Zapstore).
+- `lib/nostr.js`: pure parsing helpers (zap invoices, app listings).
+- `lib/useRadar.js`: the page's hook: connects to relays (NDK), feeds events to the engine, and builds what the UI shows (bubbles, feed, pulse, ranking, zap stream).
 - `lib/kinds.js`: kind -> category/verb map. Add kinds here.
 - `lib/bots.js`: bot detection (by app name, by `"bot": true` profile, and by posting rate). Their events don't count anywhere.
 - `lib/format.js`: small display helpers (time ago, short npub, compact sats).
@@ -38,9 +41,17 @@ On startup it preloads ~500 kind 31990 listings (to recognize zaps to apps) and 
 - `components/Pulse.js`: per-minute bars stacked by category; the legend filters the feed.
 - `app/opengraph-image.js` / `app/icon.js`: share preview image and tab icon, generated at build time.
 
+## Tests
+
+```bash
+npm test
+```
+
+Covers the shared core: app attribution, zaps, bot detection, DVMs and app listings.
+
 ## Quick tweaks
 
-- Relays: `RELAYS` (live listening) and `PROFILE_RELAYS` (profiles) in `lib/useRadar.js`.
+- Relays: `RELAYS` (live listening) and `PROFILE_RELAYS` (profiles) in `lib/relays.js`.
 - Bubble window / feed length: constants at the top of `lib/useRadar.js`.
 - Reactions (kind 7) are excluded because they flood everything; add them to `WATCHED_KINDS` if you want them.
 
