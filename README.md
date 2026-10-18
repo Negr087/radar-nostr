@@ -34,8 +34,9 @@ On startup it preloads ~500 kind 31990 listings (to recognize zaps to apps) and 
 - `lib/format.js`: small display helpers (time ago, short npub, compact sats).
 - `lib/knownApps.js`: known apps (name, website and verified icon) and name normalization so "Primal Android" and "Primal Web" are a single bubble. Add apps here.
 - `components/Bubbles.js`: one bubble per app (area = activity over the last 5 min, beats on every event). They arrange themselves with a small simulation (pull to center + collisions) that sleeps when everything is still. Tapping one opens its details.
-- `components/AppDetail.js`: panel with an app's details (website, activity over 5 min / hour / 24 h, latest events).
-- `components/Ranking.js`: top 10 for the last hour and 24 h. Counted in 10 min buckets and stored in `localStorage`, so it only reflects what this browser saw while the page was open.
+- `components/AppDetail.js`: panel with an app's details (website, live activity, stored hour / 24 h / 7 days with a 24 h chart, latest events).
+- `components/Ranking.js`: top 10 for the last hour, 24 h and 7 days, read from Supabase (counted 24/7 by the worker, the same for everyone).
+- `lib/supabase.js` / `lib/useHistory.js`: read-only access to the database (public anon key) and the hooks for the ranking and each app's history.
 - `components/Feed.js`: live ticker (each item opens the event on njump.me).
 - `components/Zaps.js`: zap stream with every zap (not only app-related ones), newest on top, bigger zaps glow more.
 - `components/Pulse.js`: per-minute bars stacked by category; the legend filters the feed.
@@ -80,5 +81,6 @@ Covers the shared core: app attribution, zaps, bot detection, DVMs and app listi
 
 ## Next steps (v2)
 
-- Node worker on the Umbrel node listening 24/7 + Supabase for daily/weekly rankings and history.
-- Real ranking (not per browser) once the worker + Supabase exist.
+- Done: worker on the Umbrel node listening 24/7 + Supabase for rankings and history.
+- Count Obelisk's groups once its relay admits a radar account.
+- Roll old 10 min buckets up into hourly ones to keep the free Supabase plan small.

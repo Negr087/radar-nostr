@@ -6,10 +6,10 @@ import Avatar from "./Avatar";
 const TABS = [
   { id: "hour", label: "Last hour" },
   { id: "day", label: "24 h" },
+  { id: "week", label: "7 days" },
 ];
 
-// Top 10 apps by activity. Counted in this browser while the page is open,
-// so "24 h" really means "what you saw in the last 24 h".
+// Top 10 apps by activity, counted 24/7 by the worker (the same for every visitor).
 export default function Ranking({ ranking, onSelect }) {
   const [tab, setTab] = useState("hour");
   const rows = ranking[tab];
@@ -31,7 +31,13 @@ export default function Ranking({ ranking, onSelect }) {
         ))}
       </div>
       {!rows.length ? (
-        <div className="empty">Collecting data… the ranking builds up from live events.</div>
+        <div className="empty">
+          {!ranking.loaded
+            ? "Loading…"
+            : ranking.error
+              ? "The ranking isn't available right now."
+              : "No activity counted in this period yet."}
+        </div>
       ) : (
         <ol className="rank-list">
           {rows.map((r, i) => (

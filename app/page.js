@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { useRanking } from "@/lib/useHistory";
 import { useRadar } from "@/lib/useRadar";
 import AppDetail from "@/components/AppDetail";
 import Bubbles from "@/components/Bubbles";
@@ -16,19 +17,22 @@ export default function Home() {
     pulse,
     stats,
     profiles,
-    ranking,
     zaps,
     zapStats,
     getApp,
     getRecent,
-    getCounts,
   } = useRadar();
+  const ranking = useRanking(getApp);
   // Hover list of relays and whether each one is connected.
   const relayTitle = stats.relayList
     .map((r) => `${r.up ? "●" : "○"} ${r.url.replace("wss://", "")}`)
     .join("\n");
   const [filter, setFilter] = useState(null);
   const [selected, setSelected] = useState(null);
+  // Stored info for an app opened from the ranking that this browser hasn't seen live.
+  const rankedInfo = ["hour", "day", "week"]
+    .flatMap((w) => ranking[w])
+    .find((r) => r.key === selected);
   const closeDetail = useCallback(() => setSelected(null), []);
   const pct = stats.total ? Math.round((stats.tagged / stats.total) * 100) : 0;
 
@@ -67,7 +71,7 @@ export default function Home() {
 
       <section className="grid grid-bottom">
         <div className="panel">
-          <h2>Ranking <small>counted in this browser</small></h2>
+          <h2>Ranking <small>counted 24/7</small></h2>
           <Ranking ranking={ranking} onSelect={setSelected} />
         </div>
         <div className="panel">
@@ -92,7 +96,7 @@ export default function Home() {
           apps={apps}
           getApp={getApp}
           getRecent={getRecent}
-          getCounts={getCounts}
+          fallback={rankedInfo}
           profiles={profiles}
           onClose={closeDetail}
         />
