@@ -167,3 +167,14 @@ test("app data (30078) counts for its app but stays out of the feed", () => {
   assert.equal(r.appKey, "app:zeus");
   assert.equal(r.showInFeed, false);
 });
+
+test("malformed 31990 addresses in client tags are never fetched", () => {
+  const asked = [];
+  const engine = createEngine({ fetchListing: (f) => (asked.push(f), Promise.resolve(null)) });
+  const bad = ["31990:abc:x", `31990:${PK(1)}`, `1:${PK(1)}:x`, `31990:${"G".repeat(64)}:x`];
+  bad.forEach((addr, i) => engine.classify(ev({ tags: [["client", `Bad${i}`, addr]] })));
+  assert.equal(asked.length, 0);
+  engine.classify(ev({ tags: [["client", "Good", `31990:${PK(2)}:app`]] }));
+  assert.equal(asked.length, 1);
+  assert.deepEqual(asked[0]["#d"], ["app"]);
+});

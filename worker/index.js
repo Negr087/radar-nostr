@@ -167,6 +167,11 @@ async function main() {
   }, 10 * 60 * 1000);
 }
 
+// A stray error in a library callback (NDK has had a few) shouldn't take down a 24/7
+// listener and lose up to 5 minutes of pending counts: log it and keep going.
+process.on("uncaughtException", (err) => log("uncaught error (continuing):", err.stack || err));
+process.on("unhandledRejection", (err) => log("unhandled rejection (continuing):", err));
+
 // On stop (docker stop / Ctrl+C), send what's pending instead of losing it.
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, async () => {
