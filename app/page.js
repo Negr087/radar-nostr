@@ -7,10 +7,26 @@ import Bubbles from "@/components/Bubbles";
 import Feed from "@/components/Feed";
 import Pulse from "@/components/Pulse";
 import Ranking from "@/components/Ranking";
+import Zaps from "@/components/Zaps";
 
 export default function Home() {
-  const { feed, apps, pulse, stats, profiles, ranking, getApp, getRecent, getCounts } =
-    useRadar();
+  const {
+    feed,
+    apps,
+    pulse,
+    stats,
+    profiles,
+    ranking,
+    zaps,
+    zapStats,
+    getApp,
+    getRecent,
+    getCounts,
+  } = useRadar();
+  // Hover list of relays and whether each one is connected.
+  const relayTitle = stats.relayList
+    .map((r) => `${r.up ? "●" : "○"} ${r.url.replace("wss://", "")}`)
+    .join("\n");
   const [filter, setFilter] = useState(null);
   const [selected, setSelected] = useState(null);
   const closeDetail = useCallback(() => setSelected(null), []);
@@ -25,7 +41,9 @@ export default function Home() {
           <span className="tag">which apps people are using, right now</span>
         </div>
         <div className="stats">
-          <div><b>{stats.relays}</b><span>relays</span></div>
+          <div title={relayTitle}>
+            <b>{stats.relays}/{stats.relayList.length}</b><span>relays</span>
+          </div>
           <div><b>{stats.total.toLocaleString("en-US")}</b><span>events</span></div>
           <div><b>{apps.length}</b><span>active apps</span></div>
           <div><b>{pct}%</b><span>signed</span></div>
@@ -53,9 +71,14 @@ export default function Home() {
           <Ranking ranking={ranking} onSelect={setSelected} />
         </div>
         <div className="panel">
-          <h2>Pulse <small>events per minute · tap a category to filter</small></h2>
-          <Pulse pulse={pulse} filter={filter} onFilter={setFilter} />
+          <h2>Zaps <small>every zap, live</small></h2>
+          <Zaps zaps={zaps} zapStats={zapStats} profiles={profiles} getApp={getApp} />
         </div>
+      </section>
+
+      <section className="panel">
+        <h2>Pulse <small>events per minute · tap a category to filter</small></h2>
+        <Pulse pulse={pulse} filter={filter} onFilter={setFilter} />
       </section>
 
       <footer>

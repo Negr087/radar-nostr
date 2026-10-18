@@ -1,17 +1,8 @@
 "use client";
 
 import Avatar from "./Avatar";
+import { ago, short } from "@/lib/format";
 import { CATEGORIES } from "@/lib/kinds";
-
-function ago(t) {
-  const s = Math.max(0, Math.round((Date.now() - t) / 1000));
-  if (s < 60) return `${s}s`;
-  return `${Math.floor(s / 60)}m`;
-}
-
-function short(pk) {
-  return pk ? `${pk.slice(0, 6)}…${pk.slice(-4)}` : "anon";
-}
 
 export default function Feed({ feed, profiles, getApp, filter }) {
   const items = filter ? feed.filter((f) => f.cat === filter) : feed;
