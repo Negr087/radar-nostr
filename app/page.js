@@ -32,7 +32,7 @@ export default function Home() {
   const [filter, setFilter] = useState(null);
   const [selected, setSelected] = useState(null);
   // Stored info for an app opened from the ranking that this browser hasn't seen live.
-  const rankedInfo = ["events", "sats"]
+  const rankedInfo = ["events", "sats", "new"]
     .flatMap((m) => ["hour", "day", "week"].flatMap((w) => ranking[m][w]))
     .find((r) => r.key === selected);
   const closeDetail = useCallback(() => setSelected(null), []);

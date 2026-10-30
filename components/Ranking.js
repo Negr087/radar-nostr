@@ -2,21 +2,44 @@
 
 import { useState } from "react";
 import Avatar from "./Avatar";
-import { compactSats } from "@/lib/format";
+import { compactSats, duration } from "@/lib/format";
 
 const TABS = [
-  { id: "hour", label: "Last hour" },
-  { id: "day", label: "24 h" },
-  { id: "week", label: "7 days" },
+  { id: "hour", label: "Last hour", previous: "the hour before" },
+  { id: "day", label: "24 h", previous: "the 24 h before" },
+  { id: "week", label: "7 days", previous: "the 7 days before" },
 ];
 
 const METRICS = [
   { id: "events", label: "Events" },
   { id: "sats", label: "⚡ Sats" },
+  { id: "new", label: "✨ New" },
 ];
 
-// Top 10 apps by activity or by zapped sats, counted 24/7 by the worker (the same for
-// every visitor).
+// Smaller changes than this (in %) aren't shown: they're the usual ups and downs.
+const TREND_SHOWN = 20;
+
+// Trend vs. the previous period ("↑ 35%"), or how long ago a new app was first seen.
+function Trend({ row, metric, tab }) {
+  if (metric === "new") {
+    return (
+      <span className="rank-trend" title="First seen by the radar">
+        {duration((Date.now() - row.firstSeen) / 1000)}
+      </span>
+    );
+  }
+  if (row.trend == null || Math.abs(row.trend) < TREND_SHOWN) return <span className="rank-trend" />;
+  const up = row.trend > 0;
+  const previous = TABS.find((t) => t.id === tab).previous;
+  return (
+    <span className={`rank-trend ${up ? "up" : "down"}`} title={`vs. ${previous}`}>
+      {up ? "↑" : "↓"} {Math.abs(row.trend) > 999 ? ">999" : Math.abs(row.trend)}%
+    </span>
+  );
+}
+
+// Top 10 apps by activity or by zapped sats, plus the apps first seen in the period,
+// counted 24/7 by the worker (the same for every visitor).
 export default function Ranking({ ranking, onSelect }) {
   const [tab, setTab] = useState("hour");
   const [metric, setMetric] = useState("events");
@@ -61,7 +84,9 @@ export default function Ranking({ ranking, onSelect }) {
               ? "The ranking isn't available right now."
               : metric === "sats"
                 ? "No zaps through an app counted in this period yet."
-                : "No activity counted in this period yet."}
+                : metric === "new"
+                  ? "No new apps in this period."
+                  : "No activity counted in this period yet."}
         </div>
       ) : (
         <ol className={`rank-list ${metric}`}>
@@ -86,6 +111,7 @@ export default function Ranking({ ranking, onSelect }) {
                 <span className="rank-count">
                   {metric === "sats" ? compactSats(r.count) : r.count.toLocaleString("en-US")}
                 </span>
+                <Trend row={r} metric={metric} tab={tab} />
               </button>
             </li>
           ))}
@@ -94,6 +120,11 @@ export default function Ranking({ ranking, onSelect }) {
       {metric === "sats" && rows.length > 0 && (
         <p className="rank-note">
           Zaps to an app count for it; zaps to a person count for the app they were sent from.
+        </p>
+      )}
+      {metric === "new" && rows.length > 0 && (
+        <p className="rank-note">
+          Apps the radar saw for the first time in this period, by events since then.
         </p>
       )}
     </div>

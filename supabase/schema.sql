@@ -180,3 +180,48 @@ language sql stable as $$
          extract(epoch from now() - updated_at)::integer
   from worker_status where id = 1;
 $$;
+
+-- Page: trend for the apps shown in a ranking: their count (events or zapped sats) over
+-- the last `minutes` vs. the `minutes` before. Only complete buckets count (a bucket is
+-- flushed up to ~6 min after it ends), and both periods come back null when the worker
+-- missed more than 10% of either, so an outage doesn't read as a drop or a jump.
+create or replace function app_trends(minutes integer, keys text[], metric text default 'events')
+returns table (app_key text, recent bigint, previous bigint)
+language sql stable as $$
+  with w as (
+    select e, e - make_interval(mins => minutes) as mid, e - make_interval(mins => 2 * minutes) as start
+    from (select to_timestamp(floor(extract(epoch from now() - interval '6 minutes') / 600) * 600) as e) b
+  ), cov as (
+    select count(distinct c.bucket) filter (where c.bucket >= w.mid) as cur,
+           count(distinct c.bucket) filter (where c.bucket < w.mid) as prev
+    from category_activity c, w
+    where c.bucket >= w.start and c.bucket < w.e
+  ), counts as (
+    select a.app_key, a.bucket, a.events::bigint as n
+    from app_activity a where metric = 'events' and a.app_key = any(keys)
+    union all
+    select z.app_key, z.bucket, z.sats
+    from zap_activity z where metric = 'sats' and z.app_key = any(keys)
+  )
+  select k.key,
+         case when ok then coalesce(sum(x.n) filter (where x.bucket >= w.mid), 0) end,
+         case when ok then coalesce(sum(x.n) filter (where x.bucket < w.mid), 0) end
+  from unnest(keys) k(key)
+  cross join w
+  cross join (select cur >= 0.9 * minutes / 10 and prev >= 0.9 * minutes / 10 as ok from cov) covered
+  left join counts x on x.app_key = k.key and x.bucket >= w.start and x.bucket < w.e
+  group by k.key, covered.ok;
+$$;
+
+-- Page: apps the worker saw for the first time in the last `minutes`, by activity since.
+create or replace function new_apps(minutes integer, max_rows integer default 10)
+returns table (app_key text, name text, website text, icon text, events bigint, first_seen timestamptz)
+language sql stable as $$
+  select i.app_key, i.name, i.website, i.icon, sum(a.events)::bigint, i.first_seen
+  from apps i
+  join app_activity a on a.app_key = i.app_key and a.bucket >= i.first_seen - interval '10 minutes'
+  where i.first_seen > now() - make_interval(mins => minutes)
+  group by i.app_key, i.name, i.website, i.icon, i.first_seen
+  order by 5 desc
+  limit max_rows;
+$$;
