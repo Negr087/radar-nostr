@@ -13,6 +13,7 @@ const TABS = [
 const METRICS = [
   { id: "events", label: "Events" },
   { id: "sats", label: "⚡ Sats" },
+  { id: "users", label: "👤 Users" },
   { id: "new", label: "✨ New" },
 ];
 
@@ -38,8 +39,8 @@ function Trend({ row, metric, tab }) {
   );
 }
 
-// Top 10 apps by activity or by zapped sats, plus the apps first seen in the period,
-// counted 24/7 by the worker (the same for every visitor).
+// Top 10 apps by activity, zapped sats or unique users, plus the apps first seen in the
+// period, counted 24/7 by the worker (the same for every visitor).
 export default function Ranking({ ranking, onSelect }) {
   const [tab, setTab] = useState("hour");
   const [metric, setMetric] = useState("events");
@@ -86,7 +87,9 @@ export default function Ranking({ ranking, onSelect }) {
                 ? "No zaps through an app counted in this period yet."
                 : metric === "new"
                   ? "No new apps in this period."
-                  : "No activity counted in this period yet."}
+                  : metric === "users"
+                    ? "No users counted in this period yet."
+                    : "No activity counted in this period yet."}
         </div>
       ) : (
         <ol className={`rank-list ${metric}`}>
@@ -120,6 +123,11 @@ export default function Ranking({ ranking, onSelect }) {
       {metric === "sats" && rows.length > 0 && (
         <p className="rank-note">
           Zaps to an app count for it; zaps to a person count for the app they were sent from.
+        </p>
+      )}
+      {metric === "users" && rows.length > 0 && (
+        <p className="rank-note">
+          Different accounts that used each app (bots filtered out), however much they posted.
         </p>
       )}
       {metric === "new" && rows.length > 0 && (

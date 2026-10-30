@@ -57,9 +57,22 @@ create policy "public read" on zap_activity for select using (true);
 create policy "public read" on category_activity for select using (true);
 create policy "public read" on apps for select using (true);
 
+-- Each app's authors per bucket, for unique user counts. `author` is a salted hash of the
+-- pubkey (see worker/aggregate.js), never the pubkey. Not readable by anyone: the page only
+-- gets counts, through the functions below.
+create table if not exists app_authors (
+  bucket timestamptz not null,
+  app_key text not null,
+  author bigint not null,
+  primary key (bucket, app_key, author)
+);
+
+alter table app_authors enable row level security;
+
 -- Worker: adds one flush worth of counts (increments, so several flushes can share a bucket).
 -- rows: {"apps":[{bucket,app_key,events}], "zaps":[{bucket,app_key,zaps,sats}],
---        "categories":[{bucket,category,events}], "app_info":[{app_key,name,website,icon}]}
+--        "categories":[{bucket,category,events}], "authors":[{bucket,app_key,author}],
+--        "app_info":[{app_key,name,website,icon}]}
 create or replace function add_activity(rows jsonb) returns void
 language sql as $$
   insert into app_activity (bucket, app_key, events)
@@ -77,6 +90,11 @@ language sql as $$
   select (r->>'bucket')::timestamptz, r->>'category', (r->>'events')::int
   from jsonb_array_elements(coalesce(rows->'categories', '[]')) r
   on conflict (bucket, category) do update set events = category_activity.events + excluded.events;
+
+  insert into app_authors (bucket, app_key, author)
+  select (r->>'bucket')::timestamptz, r->>'app_key', (r->>'author')::bigint
+  from jsonb_array_elements(coalesce(rows->'authors', '[]')) r
+  on conflict do nothing;
 
   insert into apps (app_key, name, website, icon)
   select r->>'app_key', r->>'name', r->>'website', r->>'icon'
@@ -296,10 +314,41 @@ begin
     from category_activity where bucket < cutoff group by 1, 2;
   delete from category_activity where bucket < cutoff;
   insert into category_activity select * from rolled_categories;
+
+  create temp table rolled_authors on commit drop as
+    select distinct date_trunc('hour', bucket) as bucket, app_key, author
+    from app_authors where bucket < cutoff;
+  delete from app_authors where bucket < cutoff;
+  insert into app_authors select * from rolled_authors;
 end;
 $$;
 
 revoke execute on function rollup_old_buckets(integer) from public, anon, authenticated;
+
+-- Page: top apps by unique users (distinct authors) over the last `minutes`. Security
+-- definer: it reads app_authors, which nobody can read directly; only counts come out.
+create or replace function top_apps_by_users(minutes integer, max_rows integer default 10)
+returns table (app_key text, name text, website text, icon text, users bigint)
+language sql stable security definer set search_path = public as $$
+  select u.app_key, coalesce(i.name, u.app_key), i.website, i.icon, count(distinct u.author)
+  from app_authors u
+  left join apps i on i.app_key = u.app_key
+  where u.bucket > now() - make_interval(mins => minutes)
+  group by u.app_key, i.name, i.website, i.icon
+  order by 5 desc
+  limit max_rows;
+$$;
+
+-- Page: one app's unique users over the last hour / 24 h / 7 days.
+create or replace function app_users(key text)
+returns table (hour bigint, day bigint, week bigint)
+language sql stable security definer set search_path = public as $$
+  select count(distinct author) filter (where bucket > now() - interval '1 hour'),
+         count(distinct author) filter (where bucket > now() - interval '24 hours'),
+         count(distinct author)
+  from app_authors
+  where app_key = key and bucket > now() - interval '7 days';
+$$;
 
 -- Runs the rollup every day at 04:17 UTC (pg_cron; scheduling the same name again updates it).
 create extension if not exists pg_cron;

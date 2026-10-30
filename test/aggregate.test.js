@@ -1,7 +1,7 @@
 // Tests for the worker's aggregation (worker/aggregate.js). Run with: npm test
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BUCKET_MS, buildRows, bucketOf, isEmpty, mergeRows } from "../worker/aggregate.js";
+import { BUCKET_MS, authorHasher, buildRows, bucketOf, isEmpty, mergeRows } from "../worker/aggregate.js";
 
 const lookupApp = (key) => ({ name: key.slice(4), website: null, pictures: [`https://x/${key}.png`] });
 const T = Date.UTC(2026, 9, 18, 12, 3); // 12:03 → bucket 12:00
@@ -49,6 +49,32 @@ test("mergeRows adds up a failed flush with the next one", () => {
   assert.equal(m.zaps[0].sats, 15);
   assert.equal(m.categories[0].events, 2);
   assert.equal(m.app_info.length, 1);
+});
+
+test("authors: one row per bucket, app and hashed author", () => {
+  const hash = authorHasher("salt");
+  const rows = buildRows(
+    [
+      rec({ appKey: "app:damus", actor: "alice" }),
+      rec({ appKey: "app:damus", actor: "alice" }), // same author, same bucket
+      rec({ appKey: "app:damus", actor: "bob" }),
+      rec({ appKey: "app:primal", actor: "alice" }),
+      rec({ appKey: "app:damus", actor: "alice", t: T + BUCKET_MS }), // next bucket
+      rec({ actor: "carol" }), // no app: no author row
+    ],
+    lookupApp,
+    hash
+  );
+  assert.equal(rows.authors.length, 4);
+  const alice = hash("alice");
+  assert.match(alice, /^-?\d+$/);
+  assert.notEqual(alice, hash("bob"));
+  assert.notEqual(alice, authorHasher("other salt")("alice")); // the salt matters
+  assert.equal(rows.authors.filter((r) => r.author === alice).length, 3);
+  // Without a hasher, no author rows (and nothing about the pubkey leaves).
+  assert.equal(buildRows([rec({ appKey: "app:damus", actor: "alice" })], lookupApp).authors.length, 0);
+  // Merging a retried flush keeps them as a set.
+  assert.equal(mergeRows(rows, rows).authors.length, 4);
 });
 
 test("isEmpty", () => {

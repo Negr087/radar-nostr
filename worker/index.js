@@ -17,7 +17,7 @@ import {
   ZAPSTORE_RELAY,
   trimSlash,
 } from "../lib/relays.js";
-import { buildRows, isEmpty, mergeRows } from "./aggregate.js";
+import { authorHasher, buildRows, isEmpty, mergeRows } from "./aggregate.js";
 import { createSupabase } from "./supabase.js";
 
 const DRY_RUN = process.env.DRY_RUN === "1";
@@ -30,6 +30,12 @@ const PROFILES_CHECKED_MAX = 50000;
 // Relays send something every few seconds; this much silence means the connections died
 // without NDK noticing. The worker exits and Docker (restart: unless-stopped) starts it again.
 const STALL_MS = Number(process.env.STALL_MS) || 10 * 60 * 1000;
+
+// Unique users are counted from hashed pubkeys. AUTHOR_SALT if set, otherwise the secret
+// key (already secret and stable). Changing it makes everyone count as new for a week.
+const hashAuthor = authorHasher(
+  process.env.AUTHOR_SALT || process.env.SUPABASE_SECRET_KEY || "dry-run"
+);
 
 const log = (...args) => console.log(new Date().toISOString(), ...args);
 
@@ -91,13 +97,14 @@ async function flush({ final = false } = {}) {
   totals.droppedBots += ready.length - clean.length;
   totals.counted += clean.length;
 
-  let rows = buildRows(clean, engine.lookupApp);
+  let rows = buildRows(clean, engine.lookupApp, hashAuthor);
   if (unsent) rows = mergeRows(unsent, rows);
   if (isEmpty(rows)) return;
 
   const summary =
     `${clean.length} events · ${rows.apps.length} app rows · ` +
-    `${rows.zaps.reduce((n, z) => n + z.zaps, 0)} zaps · pending ${pending.length}`;
+    `${rows.zaps.reduce((n, z) => n + z.zaps, 0)} zaps · ${rows.authors.length} author rows · ` +
+    `pending ${pending.length}`;
   if (DRY_RUN) {
     log("[dry run]", summary);
     const top = [...rows.apps].sort((a, b) => b.events - a.events).slice(0, 5);

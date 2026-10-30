@@ -179,6 +179,7 @@ footer { color: var(--muted); font-size: 12px; text-align: center; line-height: 
 .pulse-message { align-items: center; justify-content: center; color: var(--muted); }
 .panel h2 small.stale { color: var(--orange); }
 .rank-list.new .rank-bar span { background: #60a5fa; }
+.rank-list.users .rank-bar span { background: #34d399; }
 .rank-trend { font-family: "JetBrains Mono", monospace; font-size: 11px; text-align: right; color: var(--muted); white-space: nowrap; }
 .rank-trend.up { color: #34d399; }
 .rank-trend.down { color: #f87171; }
@@ -203,4 +204,5 @@ footer { color: var(--muted); font-size: 12px; text-align: center; line-height: 
 .app-button { background: #a78bfa22; border: 1px solid #a78bfa55; color: var(--accent); border-radius: 10px; padding: 8px 14px; font-size: 14px; font-weight: 600; text-decoration: none; }
 .app-button:hover { background: #a78bfa33; }
 .detail-link { color: var(--accent); font-size: 12px; text-decoration: none; }
-@media (max-width: 600px) { .app-page .detail-stats { grid-template-columns: repeat(2, 1fr); } }
+.app-page .app-stats { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 600px) { .app-page .app-stats { grid-template-columns: repeat(2, 1fr); } }

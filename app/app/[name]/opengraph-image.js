@@ -41,7 +41,9 @@ export default async function OpengraphImage({ params }) {
   const peak = Math.max(1, ...(app?.points || []).map((p) => p.events));
   const stats = app
     ? [
-        [app.day.toLocaleString("en-US"), "events · 24 h"],
+        app.users
+          ? [app.users.day.toLocaleString("en-US"), "users · 24 h"]
+          : [app.day.toLocaleString("en-US"), "events · 24 h"],
         app.rank ? [`#${app.rank}`, "on Nostr today"] : null,
         app.satsWeek ? [compactSats(app.satsWeek), "sats zapped · 7 days"] : null,
       ].filter(Boolean)

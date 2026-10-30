@@ -12,7 +12,11 @@ const num = (n) => n.toLocaleString("en-US");
 
 // One line for search results and link previews.
 function describe(app) {
-  const parts = [`${num(app.day)} events in the last 24 h`];
+  const parts = [
+    app.users
+      ? `${num(app.users.day)} users and ${num(app.day)} events in the last 24 h`
+      : `${num(app.day)} events in the last 24 h`,
+  ];
   if (app.rank) parts.push(`#${app.rank} on Nostr today`);
   if (app.satsWeek) parts.push(`${compactSats(app.satsWeek)} sats zapped in 7 days`);
   return `${app.name} on Radar Nostr: ${parts.join(" · ")}.`;
@@ -67,13 +71,19 @@ export default async function AppPage({ params }) {
           {app.rank && <div className="app-rank">#{app.rank}<span>today</span></div>}
         </header>
 
-        <div className="detail-stats">
-          <div><b>{num(app.hour)}</b><span>last hour</span></div>
-          <div><b>{num(app.day)}</b><span>24 h</span></div>
-          <div><b>{num(app.week)}</b><span>7 days</span></div>
+        <div className="detail-stats app-stats">
+          {app.users && (
+            <>
+              <div><b>{num(app.users.day)}</b><span>users · 24 h</span></div>
+              <div><b>{num(app.users.week)}</b><span>users · 7 days</span></div>
+            </>
+          )}
           <div title={`${num(app.satsWeek)} sats in ${num(app.zapsWeek)} zaps`}>
             <b>{compactSats(app.satsWeek)}</b><span>sats · 7 days</span>
           </div>
+          <div><b>{num(app.hour)}</b><span>events · 1 h</span></div>
+          <div><b>{num(app.day)}</b><span>events · 24 h</span></div>
+          <div><b>{num(app.week)}</b><span>events · 7 days</span></div>
         </div>
 
         <h3>Last 24 hours <small>events per hour</small></h3>
@@ -97,7 +107,7 @@ export default async function AppPage({ params }) {
 
         <p className="detail-note">
           Events signed with a <code>{app.name}</code> client tag (NIP-89), counted 24/7 from
-          public relays, bots filtered out. On the radar since {since}. Updated every few
+          public relays, bots filtered out. Users: different accounts behind those events. On the radar since {since}. Updated every few
           minutes.
         </p>
       </section>

@@ -39,7 +39,7 @@ export default function Home() {
     if (slug) setSelected(`app:${slug}`);
   }, []);
   // Stored info for an app opened from the ranking that this browser hasn't seen live.
-  const rankedInfo = ["events", "sats", "new"]
+  const rankedInfo = ["events", "sats", "users", "new"]
     .flatMap((m) => ["hour", "day", "week"].flatMap((w) => ranking[m][w]))
     .find((r) => r.key === selected);
   const closeDetail = useCallback(() => setSelected(null), []);

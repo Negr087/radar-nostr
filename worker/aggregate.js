@@ -1,17 +1,31 @@
 // Turns classified records (from lib/engine.js) into the rows add_activity() expects:
-// counts per 10 minute bucket, per app, per category, and zaps. Pure: no network.
+// counts per 10 minute bucket, per app, per category, and zaps, plus each app's authors
+// (hashed) for unique user counts. Pure: no network.
+
+import { createHash } from "node:crypto";
 
 export const BUCKET_MS = 10 * 60 * 1000;
+
+// Turns a pubkey into a 64-bit number (as a string: JSON numbers lose precision past 2^53)
+// keyed by `salt`, so the stored ids can't be matched back to accounts. The salt has to stay
+// the same: with a new one, everyone counts again as a new user in the windows it spans.
+export function authorHasher(salt) {
+  if (!salt) throw new Error("authorHasher needs a salt");
+  return (pubkey) =>
+    createHash("sha256").update(salt).update(pubkey).digest().readBigInt64BE(0).toString();
+}
 
 export function bucketOf(t) {
   return new Date(Math.floor(t / BUCKET_MS) * BUCKET_MS).toISOString();
 }
 
 // `lookupApp(key)` gives the display info for app_info (name, website, pictures).
-export function buildRows(records, lookupApp) {
+// `hashAuthor` (from authorHasher): without it, no author rows.
+export function buildRows(records, lookupApp, hashAuthor) {
   const apps = new Map(); // "bucket|key" -> events
   const zaps = new Map(); // "bucket|key" -> {zaps, sats}
   const categories = new Map(); // "bucket|cat" -> events
+  const authors = new Map(); // "bucket|key|hash" -> row
   const seenApps = new Set();
 
   for (const r of records) {
@@ -22,6 +36,10 @@ export function buildRows(records, lookupApp) {
       const k = `${bucket}|${r.appKey}`;
       apps.set(k, (apps.get(k) || 0) + 1);
       seenApps.add(r.appKey);
+      if (hashAuthor && r.actor) {
+        const author = hashAuthor(r.actor);
+        authors.set(`${k}|${author}`, { bucket, app_key: r.appKey, author });
+      }
     }
     if (r.zap) {
       const k = `${bucket}|${r.appKey || ""}`;
@@ -49,6 +67,7 @@ export function buildRows(records, lookupApp) {
       const [bucket, category] = split(k);
       return { bucket, category, events };
     }),
+    authors: [...authors.values()],
     app_info: [...seenApps].map((app_key) => {
       const info = lookupApp(app_key);
       return {
@@ -82,9 +101,19 @@ export function mergeRows(base, extra) {
       (r) => `${r.bucket}|${r.category}`,
       ["events"]
     ),
+    // A set, not a sum: the same author twice in a bucket is one author.
+    authors: sumBy(
+      [...(base.authors || []), ...(extra.authors || [])],
+      (r) => `${r.bucket}|${r.app_key}|${r.author}`,
+      []
+    ),
     app_info: [...latest.values()],
   };
 }
 
 export const isEmpty = (rows) =>
-  !rows.apps.length && !rows.zaps.length && !rows.categories.length && !rows.app_info.length;
+  !rows.apps.length &&
+  !rows.zaps.length &&
+  !rows.categories.length &&
+  !rows.authors.length &&
+  !rows.app_info.length;
