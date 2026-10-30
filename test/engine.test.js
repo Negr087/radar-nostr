@@ -155,6 +155,21 @@ test("accounts above the rate limit get flagged, and their DVM replies too", () 
   assert.equal(engine.isBot(PK(4)), false);
 });
 
+test("an account posting file chunks nonstop gets flagged", () => {
+  const engine = createEngine();
+  const now = 1_800_000_000_000;
+  const uploader = PK(9);
+  for (let i = 0; i < 21; i++) {
+    engine.classify(ev({ kind: 1063, pubkey: uploader, tags: [["chunk", String(i)]] }), { now });
+  }
+  engine.checkRates(now);
+  assert.equal(engine.isBot(uploader), true);
+  // Sharing a few files is fine.
+  for (let i = 0; i < 5; i++) engine.classify(ev({ kind: 1063, pubkey: PK(3) }), { now });
+  engine.checkRates(now);
+  assert.equal(engine.isBot(PK(3)), false);
+});
+
 test("bot profiles flag the account", () => {
   const engine = createEngine();
   assert.equal(engine.markProfile(PK(6), { name: "candr_boost_bot" }), true);
