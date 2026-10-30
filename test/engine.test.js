@@ -1,7 +1,7 @@
 // Tests for the shared core (lib/engine.js and friends). Run with: npm test
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isBotClient, isBotProfile } from "../lib/bots.js";
+import { isBlockedAppKey, isBotClient, isBotProfile, setExtraBlocks } from "../lib/bots.js";
 import { createEngine } from "../lib/engine.js";
 import { normalizeName } from "../lib/knownApps.js";
 import { bolt11Sats } from "../lib/nostr.js";
@@ -38,6 +38,28 @@ test("normalizeName merges spellings of the same app", () => {
   assert.equal(normalizeName("noStrudel"), "nostrudel");
   assert.equal(normalizeName("zap.stream"), "zapstream");
   assert.equal(normalizeName("0xchat"), "0xchat");
+});
+
+test("blocks from the database add to the built-in ones", () => {
+  setExtraBlocks([
+    { pattern: "swipe-rugdesk", match: "exact" },
+    { pattern: "spamnet", match: "prefix" },
+  ]);
+  try {
+    assert.equal(isBotClient("Swipe RugDesk"), true);
+    assert.equal(isBotClient("swipe-rugdesk-pro"), false); // exact: not a prefix
+    assert.equal(isBotClient("spamnet-v7"), true);
+    assert.equal(isBotClient("Mostr"), true); // built-in still applies
+    assert.equal(isBlockedAppKey("app:swiperugdesk"), true);
+    assert.equal(isBlockedAppKey("app:primal"), false);
+    assert.equal(isBlockedAppKey(null), false);
+    // Classifying a blocked client drops the event.
+    const engine = createEngine();
+    assert.equal(engine.classify(ev({ tags: [["client", "swipe-rugdesk"]] }), { now: 1 }), null);
+  } finally {
+    setExtraBlocks([]);
+  }
+  assert.equal(isBotClient("Swipe RugDesk"), false);
 });
 
 test("bot names and profiles", () => {

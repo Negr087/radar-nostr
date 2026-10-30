@@ -31,6 +31,7 @@ On startup it preloads ~500 kind 31990 listings (to recognize zaps to apps) and 
 - `lib/useRadar.js`: the page's hook: connects to relays (NDK), feeds events to the engine, and builds what the UI shows (bubbles, feed, pulse, ranking, zap stream).
 - `lib/kinds.js`: kind -> category/verb map. Add kinds here.
 - `lib/bots.js`: bot detection (by app name, by `"bot": true` profile, and by posting rate). Their events don't count anywhere.
+- `lib/blocklist.js`: extra blocked clients from the database (`blocked_clients`), reloaded every 10 min by the page and the worker, so new spam is blocked without a deploy.
 - `lib/format.js`: small display helpers (time ago, short npub, compact sats).
 - `lib/knownApps.js`: known apps (name, website and verified icon) and name normalization so "Primal Android" and "Primal Web" are a single bubble. Add apps here.
 - `components/Bubbles.js`: one bubble per app (area = activity over the last 5 min, beats on every event). They arrange themselves with a small simulation (pull to center + collisions) that sleeps when everything is still. Tapping one opens its details.
@@ -68,6 +69,18 @@ docker logs -f radar-nostr-worker                     # first "flushed" after ~6
 
 Update: `git pull && docker compose -f worker/docker-compose.yml up -d --build`.
 Run only one worker at a time: two would count every event twice.
+
+### Blocking a spam client
+
+```bash
+npm run block -- add "swipe-rugdesk" --reason "app data sync, one account"
+npm run block -- add "orig-nexus" --prefix     # every name starting with it
+npm run block -- list
+npm run block -- remove "swipe-rugdesk"
+```
+
+Page and worker pick it up within 10 minutes, and its stored counts drop out of the
+rankings. Needs the secret key in `.env`. The built-in lists in `lib/bots.js` still apply.
 
 ## Tests
 

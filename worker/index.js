@@ -5,6 +5,8 @@
 //   DRY_RUN=1 node worker/index.js   (prints what it would send, writes nothing)
 
 import NDK, { NDKRelaySet } from "@nostr-dev-kit/ndk";
+import { refreshBlocklist } from "../lib/blocklist.js";
+import { isBlockedAppKey } from "../lib/bots.js";
 import { createEngine, RATE_WINDOW_MS } from "../lib/engine.js";
 import { WATCHED_KINDS } from "../lib/kinds.js";
 import { safeJson } from "../lib/nostr.js";
@@ -84,7 +86,8 @@ async function flush({ final = false } = {}) {
   engine.checkRates(now);
   const ready = final ? pending : pending.filter((r) => now - r.t >= HOLD_MS);
   pending = final ? [] : pending.filter((r) => now - r.t < HOLD_MS);
-  const clean = ready.filter((r) => !engine.isBotItem(r));
+  // Also drops apps blocked (in the database) while their records were waiting.
+  const clean = ready.filter((r) => !engine.isBotItem(r) && !isBlockedAppKey(r.appKey));
   totals.droppedBots += ready.length - clean.length;
   totals.counted += clean.length;
 
@@ -131,6 +134,7 @@ async function tick() {
     await flush({ final: true });
     process.exit(1);
   }
+  await refreshBlocklist();
   await flush();
   await heartbeat();
 }
@@ -163,6 +167,8 @@ async function main() {
     setTimeout(resolve, 15000);
   });
   log(`preloaded ${listings} app listings`);
+  const blocks = await refreshBlocklist();
+  log(blocks == null ? "blocklist not loaded, using the built-in one" : `blocklist: ${blocks} entries`);
 
   // No backfill: counting only from now on avoids double counting after a restart.
   const since = Math.floor(Date.now() / 1000);

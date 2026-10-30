@@ -225,3 +225,25 @@ language sql stable as $$
   order by 5 desc
   limit max_rows;
 $$;
+
+-- Clients whose events don't count (spam, bots), on top of the built-in lists in
+-- lib/bots.js. `pattern` is the normalized name (lowercase, letters and digits only, as
+-- normalizeName() gives it); `match` = 'prefix' also blocks every name that starts with it.
+-- Edit it with `npm run block` (or the Table Editor); page and worker reload it every 10 min.
+create table if not exists blocked_clients (
+  pattern text primary key,
+  match text not null default 'exact' check (match in ('exact', 'prefix')),
+  reason text,
+  added_at timestamptz not null default now()
+);
+
+alter table blocked_clients enable row level security;
+drop policy if exists "public read" on blocked_clients;
+create policy "public read" on blocked_clients for select using (true);
+
+-- Page and worker: the blocklist.
+create or replace function blocklist()
+returns table (pattern text, match text)
+language sql stable as $$
+  select pattern, match from blocked_clients;
+$$;
