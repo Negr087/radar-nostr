@@ -187,3 +187,20 @@ footer { color: var(--muted); font-size: 12px; text-align: center; line-height: 
   .rank-row { grid-template-columns: 18px 24px minmax(0, 1fr) 44px 52px; }
   .rank-bar { display: none; }
 }
+
+/* App page (/app/<name>) */
+.app-page { max-width: 720px; margin: 0 auto; padding: 20px 16px 40px; display: flex; flex-direction: column; gap: 14px; }
+.back-link { color: var(--muted); font-size: 13px; text-decoration: none; }
+.back-link:hover { color: var(--text); }
+.app-panel { display: flex; flex-direction: column; gap: 14px; }
+.app-panel h1 { margin: 0; font-size: 26px; font-weight: 800; overflow-wrap: anywhere; }
+.app-panel h3 { margin: 0; font-size: 13px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.app-panel h3 small { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.app-rank { font-family: "JetBrains Mono", monospace; font-size: 26px; font-weight: 700; color: var(--accent); display: flex; flex-direction: column; align-items: flex-end; line-height: 1; }
+.app-rank span { font-family: inherit; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 400; margin-top: 4px; }
+.app-chart { height: 110px; }
+.app-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.app-button { background: #a78bfa22; border: 1px solid #a78bfa55; color: var(--accent); border-radius: 10px; padding: 8px 14px; font-size: 14px; font-weight: 600; text-decoration: none; }
+.app-button:hover { background: #a78bfa33; }
+.detail-link { color: var(--accent); font-size: 12px; text-decoration: none; }
+@media (max-width: 600px) { .app-page .detail-stats { grid-template-columns: repeat(2, 1fr); } }

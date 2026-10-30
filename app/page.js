@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { duration } from "@/lib/format";
+import { normalizeName } from "@/lib/knownApps";
 import { useRanking, useWorkerStatus } from "@/lib/useHistory";
 import { useRadar } from "@/lib/useRadar";
 import AppDetail from "@/components/AppDetail";
@@ -31,6 +32,12 @@ export default function Home() {
     .join("\n");
   const [filter, setFilter] = useState(null);
   const [selected, setSelected] = useState(null);
+  // /?app=primal (the "watch it live" link on an app's page) opens that app's details.
+  useEffect(() => {
+    const name = new URLSearchParams(window.location.search).get("app");
+    const slug = normalizeName(name);
+    if (slug) setSelected(`app:${slug}`);
+  }, []);
   // Stored info for an app opened from the ranking that this browser hasn't seen live.
   const rankedInfo = ["events", "sats", "new"]
     .flatMap((m) => ["hour", "day", "week"].flatMap((w) => ranking[m][w]))

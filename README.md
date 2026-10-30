@@ -42,6 +42,7 @@ On startup it preloads ~500 kind 31990 listings (to recognize zaps to apps) and 
 - `components/Zaps.js`: zap stream with every zap (not only app-related ones), newest on top, bigger zaps glow more.
 - `components/Pulse.js`: bars stacked by category: per minute live, or the stored history for 24 h / 7 days; the legend filters the feed.
 - `app/opengraph-image.js` / `app/icon.js`: share preview image and tab icon, generated at build time.
+- `app/app/[name]/`: each app's own page (`/app/primal`) with its numbers, today's rank, a 24 h chart and its own share image, rebuilt at most every 5 minutes (`lib/appPage.js` loads the data). `/?app=primal` opens that app's details on the radar.
 
 ## Worker (v2)
 
@@ -69,6 +70,9 @@ docker logs -f radar-nostr-worker                     # first "flushed" after ~6
 
 Update: `git pull && docker compose -f worker/docker-compose.yml up -d --build`.
 Run only one worker at a time: two would count every event twice.
+
+Storage: every day at 04:17 UTC a pg_cron job (`rollup_old_buckets()`) merges buckets older
+than 15 days into hourly ones, so the free plan doesn't fill up.
 
 ### Blocking a spam client
 
@@ -100,4 +104,3 @@ Covers the shared core: app attribution, zaps, bot detection, DVMs and app listi
 
 - Done: worker on the Umbrel node listening 24/7 + Supabase for rankings and history.
 - Count Obelisk's groups once its relay admits a radar account.
-- Roll old 10 min buckets up into hourly ones to keep the free Supabase plan small.

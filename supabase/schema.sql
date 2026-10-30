@@ -247,3 +247,60 @@ returns table (pattern text, match text)
 language sql stable as $$
   select pattern, match from blocked_clients;
 $$;
+
+-- Page: one app's summary for its own page (/app/<name>): display info, events over the
+-- last hour / 24 h / 7 days and zaps over 7 days. No rows if the worker never saw it.
+create or replace function app_summary(key text)
+returns table (app_key text, name text, website text, icon text, first_seen timestamptz,
+               hour bigint, day bigint, week bigint, zaps_week bigint, sats_week bigint)
+language sql stable as $$
+  select i.app_key, i.name, i.website, i.icon, i.first_seen,
+         coalesce(sum(a.events) filter (where a.bucket > now() - interval '1 hour'), 0)::bigint,
+         coalesce(sum(a.events) filter (where a.bucket > now() - interval '24 hours'), 0)::bigint,
+         coalesce(sum(a.events), 0)::bigint,
+         (select coalesce(sum(z.zaps), 0)::bigint from zap_activity z
+           where z.app_key = key and z.bucket > now() - interval '7 days'),
+         (select coalesce(sum(z.sats), 0)::bigint from zap_activity z
+           where z.app_key = key and z.bucket > now() - interval '7 days')
+  from apps i
+  left join app_activity a on a.app_key = i.app_key and a.bucket > now() - interval '7 days'
+  where i.app_key = key
+  group by i.app_key, i.name, i.website, i.icon, i.first_seen;
+$$;
+
+-- Storage: buckets older than `keep_days` are merged into hourly ones (same tables, the
+-- bucket is the start of the hour), so the free plan doesn't fill up. 15 days by default:
+-- 7-day trends compare against the 7 days before, at 10 minute detail. Running it again
+-- is harmless (hourly rows merge into themselves). The worker only writes recent buckets.
+create or replace function rollup_old_buckets(keep_days integer default 15)
+returns void
+language plpgsql as $$
+declare
+  cutoff timestamptz := date_trunc('hour', now() - make_interval(days => keep_days));
+begin
+  create temp table rolled_apps on commit drop as
+    select date_trunc('hour', bucket) as bucket, app_key, sum(events)::integer as events
+    from app_activity where bucket < cutoff group by 1, 2;
+  delete from app_activity where bucket < cutoff;
+  insert into app_activity select * from rolled_apps;
+
+  create temp table rolled_zaps on commit drop as
+    select date_trunc('hour', bucket) as bucket, app_key, sum(zaps)::integer as zaps,
+           sum(sats)::bigint as sats
+    from zap_activity where bucket < cutoff group by 1, 2;
+  delete from zap_activity where bucket < cutoff;
+  insert into zap_activity select * from rolled_zaps;
+
+  create temp table rolled_categories on commit drop as
+    select date_trunc('hour', bucket) as bucket, category, sum(events)::integer as events
+    from category_activity where bucket < cutoff group by 1, 2;
+  delete from category_activity where bucket < cutoff;
+  insert into category_activity select * from rolled_categories;
+end;
+$$;
+
+revoke execute on function rollup_old_buckets(integer) from public, anon, authenticated;
+
+-- Runs the rollup every day at 04:17 UTC (pg_cron; scheduling the same name again updates it).
+create extension if not exists pg_cron;
+select cron.schedule('radar-rollup', '17 4 * * *', 'select rollup_old_buckets()');

@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import Avatar from "./Avatar";
 import Feed from "./Feed";
+import { appPagePath } from "@/lib/knownApps";
 import { useAppHistory } from "@/lib/useHistory";
 
 // Side panel (bottom sheet on mobile) with an app's details: live and stored activity,
@@ -21,6 +22,7 @@ export default function AppDetail({ appKey, apps, getApp, getRecent, fallback, p
   const history = useAppHistory(appKey);
   const stat = (n) => (history && !history.error ? n.toLocaleString("en-US") : "–");
   const recent = getRecent(appKey);
+  const pagePath = appPagePath(appKey);
   const peak = Math.max(1, ...(history?.points || []).map((p) => p.events));
 
   return (
@@ -54,6 +56,11 @@ export default function AppDetail({ appKey, apps, getApp, getRecent, fallback, p
         <p className="detail-note">
           Live: what this page saw. Hour, day and week: counted 24/7, about 6 minutes behind.
         </p>
+        {pagePath && (
+          <a className="detail-link" href={pagePath}>
+            Its page, to share ↗
+          </a>
+        )}
         <h3>Last 24 hours</h3>
         <div className="detail-chart" aria-label="Events per hour, last 24 hours">
           {(history?.points || []).map((p) => (
