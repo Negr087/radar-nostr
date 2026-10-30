@@ -171,3 +171,10 @@ main { max-width: 1320px; margin: 0 auto; padding: 20px 16px 40px; display: flex
 }
 
 footer { color: var(--muted); font-size: 12px; text-align: center; line-height: 1.6; }
+
+/* Ranking by events / sats, pulse history and worker status */
+.ranking-controls { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+.rank-list.sats .rank-bar span { background: var(--orange); }
+.rank-note { margin: 10px 6px 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.pulse-message { align-items: center; justify-content: center; color: var(--muted); }
+.panel h2 small.stale { color: var(--orange); }

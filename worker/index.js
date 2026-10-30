@@ -25,6 +25,9 @@ const FLUSH_MS = Number(process.env.FLUSH_MS) || 60 * 1000;
 const HOLD_MS = Number(process.env.HOLD_MS) || RATE_WINDOW_MS;
 const PROFILE_BATCH = 100;
 const PROFILES_CHECKED_MAX = 50000;
+// Relays send something every few seconds; this much silence means the connections died
+// without NDK noticing. The worker exits and Docker (restart: unless-stopped) starts it again.
+const STALL_MS = Number(process.env.STALL_MS) || 10 * 60 * 1000;
 
 const log = (...args) => console.log(new Date().toISOString(), ...args);
 
@@ -42,9 +45,12 @@ let unsent = null; // rows from a failed flush, retried next time
 const profileQueue = new Set();
 const profilesChecked = new Set();
 const totals = { events: 0, counted: 0, droppedBots: 0, flushes: 0, failures: 0 };
+const startedAt = new Date().toISOString();
+let lastEventAt = Date.now();
 
 function handleEvent(ev, viaClient) {
   totals.events++;
+  lastEventAt = Date.now();
   // Live only, filed under arrival time (more reliable than other people's clocks).
   const r = engine.classify(ev, { now: Date.now(), viaClient });
   if (!r) return;
@@ -108,6 +114,27 @@ async function flush({ final = false } = {}) {
   }
 }
 
+// Tells the page the stored counts are up to date. Skipped while a flush is waiting to be
+// retried: then the counts aren't up to date, and the page should notice.
+async function heartbeat() {
+  if (DRY_RUN || unsent) return;
+  try {
+    await db.heartbeat({ started: startedAt, relays: connectedRelays(), relaysTotal: RELAYS.length });
+  } catch (err) {
+    log("heartbeat failed:", err.message);
+  }
+}
+
+async function tick() {
+  if (Date.now() - lastEventAt > STALL_MS) {
+    log(`no events for ${Math.round(STALL_MS / 60000)} min: exiting so the worker gets restarted`);
+    await flush({ final: true });
+    process.exit(1);
+  }
+  await flush();
+  await heartbeat();
+}
+
 function connectedRelays() {
   try {
     const up = new Set(ndk.pool.connectedRelays().map((r) => trimSlash(r.url)));
@@ -154,7 +181,8 @@ async function main() {
     .on("event", (ev) => handleEvent(ev, "Zapstore"));
 
   setInterval(checkProfiles, 5000);
-  setInterval(flush, FLUSH_MS);
+  setInterval(tick, FLUSH_MS);
+  heartbeat();
   // Status line every 10 minutes.
   setInterval(() => {
     const { tagged, newApps, botEvents } = engine.counters;

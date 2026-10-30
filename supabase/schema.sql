@@ -116,3 +116,67 @@ language sql stable as $$
   group by 1
   order by 1;
 $$;
+
+-- Page: top apps by zaps over the last `minutes`. A zap counts for the app that received
+-- it or, if it went to a person, for the app it was sent from (see lib/engine.js).
+create or replace function top_zapped_apps(minutes integer, max_rows integer default 10)
+returns table (app_key text, name text, website text, icon text, zaps bigint, sats bigint)
+language sql stable as $$
+  select z.app_key, coalesce(i.name, z.app_key), i.website, i.icon,
+         sum(z.zaps)::bigint, sum(z.sats)::bigint
+  from zap_activity z
+  left join apps i on i.app_key = z.app_key
+  where z.app_key <> '' and z.bucket > now() - make_interval(mins => minutes)
+  group by z.app_key, i.name, i.website, i.icon
+  order by 6 desc
+  limit max_rows;
+$$;
+
+-- Page: all events per category, summed per `step_minutes`, for the pulse history.
+create or replace function category_history(minutes integer, step_minutes integer default 60)
+returns table (bucket timestamptz, category text, events bigint)
+language sql stable as $$
+  select to_timestamp(floor(extract(epoch from c.bucket) / (step_minutes * 60)) * step_minutes * 60),
+         c.category, sum(c.events)::bigint
+  from category_activity c
+  where c.bucket > now() - make_interval(mins => minutes)
+  group by 1, 2
+  order by 1;
+$$;
+
+-- Worker heartbeat: a single row, updated after every flush that left nothing unsent, so
+-- `updated_at` says how fresh the stored counts are. The page warns when it gets old.
+create table if not exists worker_status (
+  id integer primary key default 1 check (id = 1),
+  started_at timestamptz not null,
+  updated_at timestamptz not null default now(),
+  relays integer not null default 0,
+  relays_total integer not null default 0
+);
+
+alter table worker_status enable row level security;
+drop policy if exists "public read" on worker_status;
+create policy "public read" on worker_status for select using (true);
+
+create or replace function worker_heartbeat(started timestamptz, relays integer, relays_total integer)
+returns void
+language sql as $$
+  insert into worker_status (id, started_at, updated_at, relays, relays_total)
+  values (1, started, now(), relays, relays_total)
+  on conflict (id) do update
+    set started_at = excluded.started_at, updated_at = now(),
+        relays = excluded.relays, relays_total = excluded.relays_total;
+$$;
+
+revoke execute on function worker_heartbeat(timestamptz, integer, integer) from public, anon, authenticated;
+grant execute on function worker_heartbeat(timestamptz, integer, integer) to service_role;
+
+-- Page: the worker's status. `age_seconds` uses the database clock, not the visitor's.
+create or replace function radar_status()
+returns table (started_at timestamptz, updated_at timestamptz, relays integer,
+               relays_total integer, age_seconds integer)
+language sql stable as $$
+  select started_at, updated_at, relays, relays_total,
+         extract(epoch from now() - updated_at)::integer
+  from worker_status where id = 1;
+$$;

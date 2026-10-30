@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Avatar from "./Avatar";
+import { compactSats } from "@/lib/format";
 
 const TABS = [
   { id: "hour", label: "Last hour" },
@@ -9,51 +10,91 @@ const TABS = [
   { id: "week", label: "7 days" },
 ];
 
-// Top 10 apps by activity, counted 24/7 by the worker (the same for every visitor).
+const METRICS = [
+  { id: "events", label: "Events" },
+  { id: "sats", label: "⚡ Sats" },
+];
+
+// Top 10 apps by activity or by zapped sats, counted 24/7 by the worker (the same for
+// every visitor).
 export default function Ranking({ ranking, onSelect }) {
   const [tab, setTab] = useState("hour");
-  const rows = ranking[tab];
+  const [metric, setMetric] = useState("events");
+  const rows = ranking[metric][tab];
   const max = Math.max(1, ...rows.map((r) => r.count));
 
   return (
     <div className="ranking">
-      <div className="tabs" role="tablist">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            role="tab"
-            aria-selected={tab === t.id}
-            className={`tab ${tab === t.id ? "active" : ""}`}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="ranking-controls">
+        <div className="tabs" role="tablist" aria-label="Period">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              role="tab"
+              aria-selected={tab === t.id}
+              className={`tab ${tab === t.id ? "active" : ""}`}
+              onClick={() => setTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <div className="tabs" role="tablist" aria-label="Ranked by">
+          {METRICS.map((m) => (
+            <button
+              key={m.id}
+              role="tab"
+              aria-selected={metric === m.id}
+              className={`tab ${metric === m.id ? "active" : ""}`}
+              onClick={() => setMetric(m.id)}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
       </div>
       {!rows.length ? (
         <div className="empty">
           {!ranking.loaded
             ? "Loading…"
-            : ranking.error
+            : ranking.error[metric]
               ? "The ranking isn't available right now."
-              : "No activity counted in this period yet."}
+              : metric === "sats"
+                ? "No zaps through an app counted in this period yet."
+                : "No activity counted in this period yet."}
         </div>
       ) : (
-        <ol className="rank-list">
+        <ol className={`rank-list ${metric}`}>
           {rows.map((r, i) => (
             <li key={r.key}>
-              <button type="button" className="rank-row" onClick={() => onSelect(r.key)}>
+              <button
+                type="button"
+                className="rank-row"
+                onClick={() => onSelect(r.key)}
+                title={
+                  metric === "sats"
+                    ? `${r.count.toLocaleString("en-US")} sats in ${r.zaps.toLocaleString("en-US")} zaps`
+                    : undefined
+                }
+              >
                 <span className="rank-pos">{i + 1}</span>
                 <Avatar src={r.pictures} seed={r.key} label={r.name} size={24} rounded="6px" />
                 <span className="rank-name">{r.name}</span>
                 <span className="rank-bar">
                   <span style={{ width: `${(r.count / max) * 100}%` }} />
                 </span>
-                <span className="rank-count">{r.count.toLocaleString("en-US")}</span>
+                <span className="rank-count">
+                  {metric === "sats" ? compactSats(r.count) : r.count.toLocaleString("en-US")}
+                </span>
               </button>
             </li>
           ))}
         </ol>
+      )}
+      {metric === "sats" && rows.length > 0 && (
+        <p className="rank-note">
+          Zaps to an app count for it; zaps to a person count for the app they were sent from.
+        </p>
       )}
     </div>
   );
