@@ -110,7 +110,9 @@ the app pages.
 npm test
 ```
 
-Covers the shared core: app attribution, zaps, bot detection, DVMs and app listings.
+Covers the shared core (app attribution, zaps, bot detection, DVMs, app listings, blocklist),
+the worker's aggregation and counting pipeline (hold, bot drops, retries after a failed flush,
+heartbeat, stall check) and its Supabase client, with no network.
 
 ## Quick tweaks
 

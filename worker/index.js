@@ -6,7 +6,6 @@
 
 import NDK, { NDKRelaySet } from "@nostr-dev-kit/ndk";
 import { refreshBlocklist } from "../lib/blocklist.js";
-import { isBlockedAppKey } from "../lib/bots.js";
 import { createEngine, RATE_WINDOW_MS } from "../lib/engine.js";
 import { WATCHED_KINDS } from "../lib/kinds.js";
 import { safeJson } from "../lib/nostr.js";
@@ -17,7 +16,8 @@ import {
   ZAPSTORE_RELAY,
   trimSlash,
 } from "../lib/relays.js";
-import { authorHasher, buildRows, isEmpty, mergeRows } from "./aggregate.js";
+import { authorHasher } from "./aggregate.js";
+import { createPipeline } from "./pipeline.js";
 import { createSupabase } from "./supabase.js";
 
 const DRY_RUN = process.env.DRY_RUN === "1";
@@ -48,21 +48,24 @@ const engine = createEngine({
   fetchListing: (filter) => ndk.fetchEvent(filter, { groupable: true }),
 });
 
-let pending = []; // classified records waiting out HOLD_MS
-let unsent = null; // rows from a failed flush, retried next time
+const pipeline = createPipeline({
+  engine,
+  db,
+  hashAuthor,
+  holdMs: HOLD_MS,
+  stallMs: STALL_MS,
+  log,
+});
 const profileQueue = new Set();
 const profilesChecked = new Set();
-const totals = { events: 0, counted: 0, droppedBots: 0, flushes: 0, failures: 0 };
 const startedAt = new Date().toISOString();
-let lastEventAt = Date.now();
 
 function handleEvent(ev, viaClient) {
-  totals.events++;
-  lastEventAt = Date.now();
+  pipeline.seen();
   // Live only, filed under arrival time (more reliable than other people's clocks).
   const r = engine.classify(ev, { now: Date.now(), viaClient });
   if (!r) return;
-  pending.push(r);
+  pipeline.add(r);
   // Profiles can reveal bots ("…_bot"): check whoever would count for an app or a zap.
   if ((r.appKey || r.zap) && !profilesChecked.has(r.actor)) profileQueue.add(r.actor);
 }
@@ -87,63 +90,23 @@ async function checkProfiles() {
   } catch {}
 }
 
-async function flush({ final = false } = {}) {
-  const now = Date.now();
-  engine.checkRates(now);
-  const ready = final ? pending : pending.filter((r) => now - r.t >= HOLD_MS);
-  pending = final ? [] : pending.filter((r) => now - r.t < HOLD_MS);
-  // Also drops apps blocked (in the database) while their records were waiting.
-  const clean = ready.filter((r) => !engine.isBotItem(r) && !isBlockedAppKey(r.appKey));
-  totals.droppedBots += ready.length - clean.length;
-  totals.counted += clean.length;
-
-  let rows = buildRows(clean, engine.lookupApp, hashAuthor);
-  if (unsent) rows = mergeRows(unsent, rows);
-  if (isEmpty(rows)) return;
-
-  const summary =
-    `${clean.length} events · ${rows.apps.length} app rows · ` +
-    `${rows.zaps.reduce((n, z) => n + z.zaps, 0)} zaps · ${rows.authors.length} author rows · ` +
-    `pending ${pending.length}`;
-  if (DRY_RUN) {
-    log("[dry run]", summary);
-    const top = [...rows.apps].sort((a, b) => b.events - a.events).slice(0, 5);
-    log("  top:", top.map((a) => `${a.app_key}=${a.events}`).join(" "));
-    unsent = null;
-    return;
-  }
-  try {
-    await db.addActivity(rows);
-    unsent = null;
-    totals.flushes++;
-    log("flushed", summary);
-  } catch (err) {
-    unsent = rows;
-    totals.failures++;
-    log("flush failed, will retry:", err.message);
-  }
-}
-
-// Tells the page the stored counts are up to date. Skipped while a flush is waiting to be
-// retried: then the counts aren't up to date, and the page should notice.
-async function heartbeat() {
-  if (DRY_RUN || unsent) return;
-  try {
-    await db.heartbeat({ started: startedAt, relays: connectedRelays(), relaysTotal: RELAYS.length });
-  } catch (err) {
-    log("heartbeat failed:", err.message);
-  }
-}
-
 async function tick() {
-  if (Date.now() - lastEventAt > STALL_MS) {
+  if (pipeline.stalled()) {
     log(`no events for ${Math.round(STALL_MS / 60000)} min: exiting so the worker gets restarted`);
-    await flush({ final: true });
+    await pipeline.flush({ final: true });
     process.exit(1);
   }
   await refreshBlocklist();
-  await flush();
+  await pipeline.flush();
   await heartbeat();
+}
+
+function heartbeat() {
+  return pipeline.heartbeat({
+    started: startedAt,
+    relays: connectedRelays(),
+    relaysTotal: RELAYS.length,
+  });
 }
 
 function connectedRelays() {
@@ -199,6 +162,7 @@ async function main() {
   // Status line every 10 minutes.
   setInterval(() => {
     const { tagged, newApps, botEvents } = engine.counters;
+    const { totals } = pipeline;
     log(
       `status · relays ${connectedRelays()}/${RELAYS.length} · events ${totals.events}` +
         ` · counted ${totals.counted} · tagged ${tagged} · new apps ${newApps}` +
@@ -217,7 +181,7 @@ process.on("unhandledRejection", (err) => log("unhandled rejection (continuing):
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, async () => {
     log(`${signal}: final flush`);
-    await flush({ final: true });
+    await pipeline.flush({ final: true });
     process.exit(0);
   });
 }
