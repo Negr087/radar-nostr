@@ -91,6 +91,19 @@ npm run block -- remove "swipe-rugdesk"
 Page and worker pick it up within 10 minutes, and its stored counts drop out of the
 rankings. Needs the secret key in `.env`. The built-in lists in `lib/bots.js` still apply.
 
+## Public API
+
+Free, no key, open CORS; responses are cached about a minute by Vercel's CDN.
+
+- `GET /api/ranking?period=hour|day|week&by=events|sats|users|new&limit=10`: the ranking, with
+  each app's page, website, icon, count and `trend_pct` vs. the previous period.
+- `GET /api/apps/<name>`: one app's numbers (events, users, zaps, today's rank, last 24 h hourly).
+- `GET /api/status`: whether the stored counts are up to date.
+- `GET /api`: this list.
+
+Code: `app/api/`, sharing `lib/ranking.js` with the page's ranking and `lib/appPage.js` with
+the app pages.
+
 ## Tests
 
 ```bash
