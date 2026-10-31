@@ -109,7 +109,12 @@ main { max-width: 1320px; margin: 0 auto; padding: 20px 16px 40px; display: flex
 .zap-stats b { color: var(--orange); font-family: "JetBrains Mono", monospace; font-size: 15px; }
 .zap-list { list-style: none; margin: 0; padding: 0; max-height: 440px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
 .zap { border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); animation: zap-in 0.5s ease; }
-.zap-row { display: flex; align-items: center; gap: 8px; padding: 7px 10px; }
+.zap-row { position: relative; display: flex; align-items: center; gap: 8px; padding: 7px 10px; }
+/* The note link covers the row; the avatars sit above it and open the profiles.
+   top/left/... instead of inset: older browsers (smart TVs) don't know inset. */
+.zap-note::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
+.zap-profile { position: relative; z-index: 1; display: flex; border-radius: 50%; }
+.zap-profile:hover { box-shadow: 0 0 0 2px var(--orange); }
 .zap-row:hover { background: #ffffff08; }
 .zap-amount { font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 12px; color: #111; background: var(--orange); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
 .zap-body { flex: 1; min-width: 0; }

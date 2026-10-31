@@ -1,7 +1,36 @@
 "use client";
 
+import { nip19 } from "@nostr-dev-kit/ndk";
 import Avatar from "./Avatar";
 import { ago, compactSats, short } from "@/lib/format";
+
+// A user's profile on njump.me (client-neutral, like the note links); null if the
+// pubkey isn't valid hex.
+function profileUrl(pubkey) {
+  try {
+    return `https://njump.me/${nip19.npubEncode(pubkey)}`;
+  } catch {
+    return null;
+  }
+}
+
+// An avatar that opens the user's profile. It sits above the row's note link.
+function ProfileAvatar({ pubkey, profile }) {
+  const avatar = <Avatar src={profile.picture} seed={pubkey} label={profile.name} size={30} />;
+  const href = pubkey && profileUrl(pubkey);
+  if (!href) return avatar;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="zap-profile"
+      title={`${profile.name || short(pubkey)}'s profile`}
+    >
+      {avatar}
+    </a>
+  );
+}
 
 // Visual weight by amount: bigger zaps glow more.
 function tier(sats) {
@@ -34,16 +63,17 @@ export default function Zaps({ zaps, zapStats, profiles, getApp }) {
             const app = getApp(z.appKey);
             return (
               <li key={z.id} className={`zap ${tier(z.sats)}`}>
-                <a
-                  href={`https://njump.me/${z.noteId || z.id}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="zap-row"
-                >
-                  <Avatar src={from.picture} seed={z.sender} label={from.name} size={30} />
+                <div className="zap-row">
+                  <ProfileAvatar pubkey={z.sender} profile={from} />
                   <span className="zap-amount">⚡ {compactSats(z.sats)}</span>
-                  <Avatar src={to.picture} seed={z.recipient} label={to.name} size={30} />
-                  <div className="zap-body">
+                  <ProfileAvatar pubkey={z.recipient} profile={to} />
+                  {/* The note link stretches over the whole row (see .zap-note). */}
+                  <a
+                    href={`https://njump.me/${z.noteId || z.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="zap-body zap-note"
+                  >
                     <div className="zap-line">
                       <strong>{from.name || short(z.sender)}</strong>
                       <span> → </span>
@@ -62,9 +92,9 @@ export default function Zaps({ zaps, zapStats, profiles, getApp }) {
                       )}
                     </div>
                     {z.comment && <div className="preview">{z.comment}</div>}
-                  </div>
+                  </a>
                   <time className="zap-time">{ago(z.t)}</time>
-                </a>
+                </div>
               </li>
             );
           })}
