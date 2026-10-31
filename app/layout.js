@@ -1,4 +1,5 @@
 import "./globals.css";
+import { DEBUG_OVERLAY } from "./debugOverlay.js";
 
 const description = "Live activity of Nostr apps and clients: what people are using, right now.";
 
@@ -25,6 +26,9 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: DEBUG_OVERLAY }} />
+      </head>
       <body>{children}</body>
     </html>
   );
