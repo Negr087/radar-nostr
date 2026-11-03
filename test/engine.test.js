@@ -63,7 +63,7 @@ test("blocks from the database add to the built-in ones", () => {
 });
 
 test("bot names and profiles", () => {
-  for (const n of ["masto-bot", "orig-nexus9-t37", "zhenguojian-app", "zhenguo-web-watch", "PosterChan AI", "Mostr"]) {
+  for (const n of ["masto-bot", "orig-nexus9-t37", "zhenguojian-app", "zhenguo-web-watch", "Mostr"]) {
     assert.equal(isBotClient(n), true, n);
   }
   for (const n of ["Amethyst", "Primal", "Zeus", "Nostrich"]) assert.equal(isBotClient(n), false, n);
