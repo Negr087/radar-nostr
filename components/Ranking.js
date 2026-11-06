@@ -41,15 +41,19 @@ function Trend({ row, metric, tab }) {
 
 // Top 10 apps by activity, zapped sats or unique users, plus the apps first seen in the
 // period, counted 24/7 by the worker (the same for every visitor).
-export default function Ranking({ ranking, onSelect }) {
-  const [tab, setTab] = useState("hour");
-  const [metric, setMetric] = useState("events");
+// `period` and `by` fix the period and metric and hide the controls (TV mode).
+export default function Ranking({ ranking, onSelect, period, by }) {
+  const [tabState, setTab] = useState("hour");
+  const [metricState, setMetric] = useState("events");
+  const tab = period || tabState;
+  const metric = by || metricState;
+  const fixed = Boolean(period || by);
   const rows = ranking[metric][tab];
   const max = Math.max(1, ...rows.map((r) => r.count));
 
   return (
     <div className="ranking">
-      <div className="ranking-controls">
+      {!fixed && <div className="ranking-controls">
         <div className="tabs" role="tablist" aria-label="Period">
           {TABS.map((t) => (
             <button
@@ -76,7 +80,7 @@ export default function Ranking({ ranking, onSelect }) {
             </button>
           ))}
         </div>
-      </div>
+      </div>}
       {!rows.length ? (
         <div className="empty">
           {!ranking.loaded
@@ -98,7 +102,7 @@ export default function Ranking({ ranking, onSelect }) {
               <button
                 type="button"
                 className="rank-row"
-                onClick={() => onSelect(r.key)}
+                onClick={() => onSelect?.(r.key)}
                 title={
                   metric === "sats"
                     ? `${r.count.toLocaleString("en-US")} sats in ${r.zaps.toLocaleString("en-US")} zaps`
@@ -127,7 +131,8 @@ export default function Ranking({ ranking, onSelect }) {
       )}
       {metric === "users" && rows.length > 0 && (
         <p className="rank-note">
-          Different accounts that used each app (bots filtered out), however much they posted.
+          Different accounts that used each app, however much they posted. Only accounts the Nostr
+          network follows count, so fresh spam accounts don&apos;t.
         </p>
       )}
       {metric === "new" && rows.length > 0 && (

@@ -19,6 +19,7 @@ import {
 import { authorHasher } from "./aggregate.js";
 import { createPipeline } from "./pipeline.js";
 import { createSupabase } from "./supabase.js";
+import { DEFAULT_SEEDS, createTrust } from "./wot.js";
 
 const DRY_RUN = process.env.DRY_RUN === "1";
 const FLUSH_MS = Number(process.env.FLUSH_MS) || 60 * 1000;
@@ -30,6 +31,10 @@ const PROFILES_CHECKED_MAX = 50000;
 // Relays send something every few seconds; this much silence means the connections died
 // without NDK noticing. The worker exits and Docker (restart: unless-stopped) starts it again.
 const STALL_MS = Number(process.env.STALL_MS) || 10 * 60 * 1000;
+// Follow lists change slowly: the web of trust is rebuilt once a day.
+const WOT_REFRESH_MS = 24 * 60 * 60 * 1000;
+// Seed accounts for the web of trust (hex pubkeys, comma separated), see worker/wot.js.
+const WOT_SEEDS = (process.env.WOT_SEEDS || "").split(",").map((s) => s.trim()).filter(Boolean);
 
 // Unique users are counted from hashed pubkeys. AUTHOR_SALT if set, otherwise the secret
 // key (already secret and stable). Changing it makes everyone count as new for a week.
@@ -48,10 +53,24 @@ const engine = createEngine({
   fetchListing: (filter) => ndk.fetchEvent(filter, { groupable: true }),
 });
 
+// Unique users only count accounts the network follows. Until the first build finishes
+// (about 2 min, well within HOLD_MS) or if it never does, everyone counts, as before.
+const trust = createTrust({
+  seeds: WOT_SEEDS.length ? WOT_SEEDS : DEFAULT_SEEDS,
+  fetchLists: async (authors) => [
+    ...(await ndk.fetchEvents(
+      { kinds: [3], authors },
+      { closeOnEose: true, relaySet: NDKRelaySet.fromRelayUrls(PROFILE_RELAYS, ndk) }
+    )),
+  ],
+  log,
+});
+
 const pipeline = createPipeline({
   engine,
   db,
   hashAuthor,
+  isTrusted: trust.isTrusted,
   holdMs: HOLD_MS,
   stallMs: STALL_MS,
   log,
@@ -137,6 +156,8 @@ async function main() {
     setTimeout(resolve, 15000);
   });
   log(`preloaded ${listings} app listings`);
+  trust.refresh();
+  setInterval(() => trust.refresh(), WOT_REFRESH_MS);
   const blocks = await refreshBlocklist();
   log(blocks == null ? "blocklist not loaded, using the built-in one" : `blocklist: ${blocks} entries`);
 
@@ -167,7 +188,7 @@ async function main() {
       `status · relays ${connectedRelays()}/${RELAYS.length} · events ${totals.events}` +
         ` · counted ${totals.counted} · tagged ${tagged} · new apps ${newApps}` +
         ` · bots ${botEvents + totals.droppedBots} · flushes ${totals.flushes}` +
-        ` · failures ${totals.failures}`
+        ` · failures ${totals.failures} · trusted ${trust.size}`
     );
   }, 10 * 60 * 1000);
 }

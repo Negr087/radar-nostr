@@ -21,7 +21,9 @@ export function bucketOf(t) {
 
 // `lookupApp(key)` gives the display info for app_info (name, website, pictures).
 // `hashAuthor` (from authorHasher): without it, no author rows.
-export function buildRows(records, lookupApp, hashAuthor) {
+// `isTrusted(pubkey)` (worker/wot.js): marks each author row as followed by the network
+// or not; null (or no function) leaves `trusted` out, and the database takes it as trusted.
+export function buildRows(records, lookupApp, hashAuthor, isTrusted) {
   const apps = new Map(); // "bucket|key" -> events
   const zaps = new Map(); // "bucket|key" -> {zaps, sats}
   const categories = new Map(); // "bucket|cat" -> events
@@ -38,7 +40,10 @@ export function buildRows(records, lookupApp, hashAuthor) {
       seenApps.add(r.appKey);
       if (hashAuthor && r.actor) {
         const author = hashAuthor(r.actor);
-        authors.set(`${k}|${author}`, { bucket, app_key: r.appKey, author });
+        const row = { bucket, app_key: r.appKey, author };
+        const trusted = isTrusted ? isTrusted(r.actor) : null;
+        if (trusted != null) row.trusted = trusted;
+        authors.set(`${k}|${author}`, row);
       }
     }
     if (r.zap) {

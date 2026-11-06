@@ -13,5 +13,8 @@ COPY lib ./lib
 COPY worker ./worker
 
 ENV NODE_ENV=production
+# Keeps the heap well under the container's 512 MB: the daily web of trust build peaks at
+# ~300 MB if the heap may grow, but retains only ~15 MB, so it fits with a tighter heap.
+ENV NODE_OPTIONS=--max-old-space-size=320
 USER node
 CMD ["node", "worker/index.js"]

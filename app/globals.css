@@ -211,3 +211,119 @@ footer { color: var(--muted); font-size: 12px; text-align: center; line-height: 
 .detail-link { color: var(--accent); font-size: 12px; text-decoration: none; }
 .app-page .app-stats { grid-template-columns: repeat(3, 1fr); }
 @media (max-width: 600px) { .app-page .app-stats { grid-template-columns: repeat(2, 1fr); } }
+
+/* Compare page (/compare?a=…&b=…) */
+.compare-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+.compare-pick { flex: 1 1 140px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.compare-pick span { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+.compare-pick input { width: 100%; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 14px; }
+.compare-pick input:focus { outline: none; border-color: var(--accent); }
+.compare-vs { color: var(--muted); font-size: 12px; padding-bottom: 10px; }
+.compare-form .app-button { cursor: pointer; font-family: inherit; }
+.compare-heads { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; }
+.compare-app { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px; border-radius: 12px; border: 1px solid var(--line); border-top: 3px solid var(--side); background: var(--panel-2); text-align: center; min-width: 0; }
+.compare-app span { font-size: 18px; font-weight: 800; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.compare-app:hover { border-color: var(--side); }
+.compare-swap { color: var(--muted); font-size: 20px; padding: 6px 8px; border-radius: 8px; }
+.compare-swap:hover { color: var(--text); background: #ffffff0a; }
+.compare-table { display: flex; flex-direction: column; gap: 2px; }
+.compare-row { display: grid; grid-template-columns: minmax(64px, 1fr) minmax(0, 2fr) minmax(64px, 1fr); align-items: center; gap: 10px; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.compare-row b { font-family: "JetBrains Mono", monospace; font-size: 16px; color: var(--muted); font-weight: 400; }
+.compare-row b:first-child { text-align: right; }
+.compare-row b.win { font-weight: 700; }
+.compare-row b.win.a { color: #a78bfa; }
+.compare-row b.win.b { color: var(--orange); }
+.compare-label { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); text-align: center; }
+.compare-share { display: flex; width: 100%; height: 4px; border-radius: 2px; overflow: hidden; background: #ffffff0a; }
+.compare-share i { display: block; height: 100%; }
+
+/* Line chart (components/LineChart.js) */
+.line-chart { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.line-chart-plot { position: relative; height: 150px; background: #ffffff05; border-radius: 6px; }
+.line-chart-plot svg { display: block; width: 100%; height: 100%; }
+.line-chart-grid { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-dasharray: 4 4; }
+.line-chart-peak { position: absolute; top: 2px; left: 6px; color: var(--muted); font-family: "JetBrains Mono", monospace; font-size: 10px; pointer-events: none; }
+.line-chart-axis { position: relative; height: 14px; color: var(--muted); font-family: "JetBrains Mono", monospace; font-size: 10px; }
+.line-chart-axis span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+.line-chart-axis span:first-child { transform: none; }
+.line-chart-axis span:last-child { transform: translateX(-100%); }
+.line-chart-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--muted); }
+.line-chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.line-chart-legend i { width: 10px; height: 3px; border-radius: 2px; display: inline-block; }
+@media (max-width: 600px) {
+  .compare-row b { font-size: 14px; }
+  .compare-app span { font-size: 15px; }
+  .line-chart-plot { height: 120px; }
+}
+.app-button.secondary { background: none; border-color: var(--line); color: var(--text); font-weight: 400; }
+.app-button.secondary:hover { border-color: var(--accent); background: none; }
+.detail-links { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+footer a { color: var(--accent); }
+
+/* TV mode (/?tv): one view at a time, sized for a screen across the room. Grid with
+   grid-gap rather than flex gap: older TV browsers don't support gap in flexbox. */
+.tv { height: 100vh; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; grid-gap: 1.2vh; padding: 2.5vh 2.5vw 3vh; position: relative; overflow: hidden; }
+.tv-idle, .tv-idle * { cursor: none !important; }
+.tv-top { display: flex; align-items: center; justify-content: space-between; }
+.tv-top .brand h1 { font-size: 2.2vw; }
+.tv-top .live-dot { width: 1vw; height: 1vw; margin-right: 0.8vw; }
+.tv-stats span { color: var(--muted); font-size: 1.3vw; margin: 0 1.2vw; }
+.tv-stats b { color: var(--text); font-family: "JetBrains Mono", monospace; font-size: 1.7vw; margin-right: 0.3vw; }
+.tv-clock { font-family: "JetBrains Mono", monospace; font-size: 2vw; color: var(--muted); }
+.tv-view { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; background: #13131dee; border: 1px solid var(--line); border-radius: 1.5vw; padding: 2vh 2vw; animation: fade 0.6s ease; }
+.tv-view h2 { margin: 0 0 1.5vh; font-size: 2vw; font-weight: 700; }
+.tv-view h2 small { color: var(--muted); font-weight: 400; font-size: 1.2vw; margin-left: 0.8vw; }
+.tv-view h2 small.tv-paused { color: var(--orange); }
+.tv-body { min-height: 0; position: relative; }
+.tv .bubbles { height: 100%; }
+.tv .bubble-count { font-size: 1vw; }
+.tv-ranking { display: grid; grid-template-columns: 1fr 1fr; grid-gap: 3vw; height: 100%; }
+.tv-ranking h3 { margin: 0 0 1vh; font-size: 1.4vw; color: var(--muted); font-weight: 600; }
+.tv .rank-row { font-size: 1.45vw; padding: 0.55vh 0.4vw; grid-template-columns: 2vw 2.6vw minmax(0, 1fr) minmax(4vw, 25%) 6vw 6vw; grid-gap: 0.8vw; cursor: default; }
+.tv .rank-row img, .tv .rank-row > div { width: 2.6vw !important; height: 2.6vw !important; font-size: 1.1vw !important; }
+.tv .rank-pos, .tv .rank-trend { font-size: 1.1vw; }
+.tv .rank-count { font-size: 1.3vw; }
+.tv .rank-bar { height: 0.7vh; }
+.tv .rank-note { display: none; }
+.tv .zap-stats { font-size: 1.3vw; margin-bottom: 1.5vh; }
+.tv .zap-stats span { margin-right: 2vw; }
+.tv .zap-stats b { font-size: 1.8vw; }
+.tv .zap-list { max-height: none; overflow: hidden; }
+.tv .zap { margin-bottom: 0.6vh; }
+.tv .zap-row { font-size: 1.35vw; padding: 0.8vh 1vw; }
+.tv .zap-row > * { margin-right: 0.8vw; }
+.tv .zap-row img, .tv .zap-row .zap-profile > div, .tv .zap-row > div:first-child { width: 2.8vw !important; height: 2.8vw !important; font-size: 1.1vw !important; }
+.tv .app-chip img, .tv .app-chip > div { width: 1.4vw !important; height: 1.4vw !important; }
+.tv .zap-amount { font-size: 1.2vw; padding: 0.3vh 0.7vw; }
+.tv .zap.mega .zap-amount { font-size: 1.45vw; }
+.tv .zap-time { font-size: 1vw; }
+.tv .preview { font-size: 1.05vw; }
+.tv-note { margin: 1vh 0 0; color: var(--orange); font-size: 1.1vw; }
+.tv-foot { display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: 1.1vw; }
+.tv-dots i { display: inline-block; width: 0.7vw; height: 0.7vw; border-radius: 50%; background: var(--line); margin-right: 0.6vw; }
+.tv-dots i.on { background: var(--accent); }
+.tv-url { font-family: "JetBrains Mono", monospace; color: var(--accent); }
+.tv-exit { color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 0.4vh 0.8vw; transition: opacity 0.4s; }
+.tv-idle .tv-exit { opacity: 0; }
+.tv-progress { position: absolute; left: 0; bottom: 0; height: 4px; width: 100%; background: var(--accent); transform-origin: left; animation: tv-progress linear forwards; opacity: 0.7; }
+@keyframes tv-progress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+/* Portrait screens and phones: smaller text would be unreadable at vw sizes. */
+@media (max-width: 900px) {
+  .tv-top .brand h1 { font-size: 20px; }
+  .tv-stats { display: none; }
+  .tv-clock { font-size: 16px; }
+  .tv-view h2 { font-size: 18px; }
+  .tv-view h2 small { font-size: 12px; }
+  .tv-ranking { grid-template-columns: 1fr; overflow: hidden; }
+  .tv-ranking h3 { font-size: 13px; }
+  .tv .rank-row { font-size: 14px; grid-template-columns: 18px 24px minmax(0, 1fr) 52px 52px; }
+  .tv .rank-row img, .tv .rank-row > div { width: 24px !important; height: 24px !important; font-size: 10px !important; }
+  .tv .rank-bar { display: none; }
+  .tv .rank-pos, .tv .rank-trend, .tv .rank-count { font-size: 12px; }
+  .tv .zap-stats, .tv .zap-row, .tv .zap-amount, .tv .zap-time, .tv .preview, .tv-foot { font-size: 12px; }
+  .tv .zap-row img, .tv .zap-row .zap-profile > div, .tv .zap-row > div:first-child { width: 30px !important; height: 30px !important; font-size: 12px !important; }
+  .tv .app-chip img, .tv .app-chip > div { width: 16px !important; height: 16px !important; }
+}
+@media (prefers-reduced-motion: reduce) { .tv-view { animation: none; } .tv-progress { animation: none; display: none; } }
+.tv .empty { font-size: 1.5vw; }
+@media (max-width: 600px) { .line-chart-axis span:nth-child(even) { display: none; } }

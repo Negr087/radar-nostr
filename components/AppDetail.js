@@ -57,9 +57,14 @@ export default function AppDetail({ appKey, apps, getApp, getRecent, fallback, p
           Live: what this page saw. Hour, day and week: counted 24/7, about 6 minutes behind.
         </p>
         {pagePath && (
-          <a className="detail-link" href={pagePath}>
-            Its page, to share ↗
-          </a>
+          <div className="detail-links">
+            <a className="detail-link" href={pagePath}>
+              Its page, to share ↗
+            </a>
+            <a className="detail-link" href={`/compare?a=${appKey.slice(4)}`}>
+              Compare with another app ↗
+            </a>
+          </div>
         )}
         <h3>Last 24 hours</h3>
         <div className="detail-chart" aria-label="Events per hour, last 24 hours">

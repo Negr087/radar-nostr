@@ -8,7 +8,8 @@ import { buildRows, isEmpty, mergeRows } from "./aggregate.js";
 // `db`: {addActivity, heartbeat} (worker/supabase.js), or null for a dry run.
 // `holdMs`: how long records wait before counting (so rate-based bot detection can still
 // drop them). `stallMs`: silence after which the connections are taken for dead.
-export function createPipeline({ engine, db, hashAuthor, holdMs, stallMs, log = () => {} }) {
+// `isTrusted` (optional, worker/wot.js): whether each author counts as a user.
+export function createPipeline({ engine, db, hashAuthor, isTrusted, holdMs, stallMs, log = () => {} }) {
   let pending = []; // classified records waiting out holdMs
   let unsent = null; // rows from a failed flush, retried next time
   let lastEventAt = Date.now();
@@ -48,13 +49,14 @@ export function createPipeline({ engine, db, hashAuthor, holdMs, stallMs, log = 
       totals.droppedBots += ready.length - clean.length;
       totals.counted += clean.length;
 
-      let rows = buildRows(clean, engine.lookupApp, hashAuthor);
+      let rows = buildRows(clean, engine.lookupApp, hashAuthor, isTrusted);
       if (unsent) rows = mergeRows(unsent, rows);
       if (isEmpty(rows)) return null;
 
       const summary =
         `${clean.length} events · ${rows.apps.length} app rows · ` +
-        `${rows.zaps.reduce((n, z) => n + z.zaps, 0)} zaps · ${rows.authors.length} author rows · ` +
+        `${rows.zaps.reduce((n, z) => n + z.zaps, 0)} zaps · ${rows.authors.length} author rows` +
+        `${rows.authors.some((a) => "trusted" in a) ? ` (${rows.authors.filter((a) => a.trusted).length} trusted)` : ""} · ` +
         `pending ${pending.length}`;
       if (!db) {
         log("[dry run]", summary);

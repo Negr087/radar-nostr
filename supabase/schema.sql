@@ -69,9 +69,13 @@ create table if not exists app_authors (
 
 alter table app_authors enable row level security;
 
+-- Whether the author is followed by the Nostr network (web of trust, see worker/wot.js).
+-- Only trusted authors count as users. Rows from before this column count as trusted.
+alter table app_authors add column if not exists trusted boolean not null default true;
+
 -- Worker: adds one flush worth of counts (increments, so several flushes can share a bucket).
 -- rows: {"apps":[{bucket,app_key,events}], "zaps":[{bucket,app_key,zaps,sats}],
---        "categories":[{bucket,category,events}], "authors":[{bucket,app_key,author}],
+--        "categories":[{bucket,category,events}], "authors":[{bucket,app_key,author,trusted?}],
 --        "app_info":[{app_key,name,website,icon}]}
 create or replace function add_activity(rows jsonb) returns void
 language sql as $$
@@ -91,10 +95,15 @@ language sql as $$
   from jsonb_array_elements(coalesce(rows->'categories', '[]')) r
   on conflict (bucket, category) do update set events = category_activity.events + excluded.events;
 
-  insert into app_authors (bucket, app_key, author)
-  select (r->>'bucket')::timestamptz, r->>'app_key', (r->>'author')::bigint
+  -- No `trusted` (worker without a web of trust yet): counts as trusted, as before.
+  -- Trusted once in a bucket stays trusted.
+  insert into app_authors (bucket, app_key, author, trusted)
+  select (r->>'bucket')::timestamptz, r->>'app_key', (r->>'author')::bigint,
+         coalesce((r->>'trusted')::boolean, true)
   from jsonb_array_elements(coalesce(rows->'authors', '[]')) r
-  on conflict do nothing;
+  on conflict (bucket, app_key, author) do update
+    set trusted = app_authors.trusted or excluded.trusted
+    where not app_authors.trusted and excluded.trusted;
 
   insert into apps (app_key, name, website, icon)
   select r->>'app_key', r->>'name', r->>'website', r->>'icon'
@@ -316,30 +325,31 @@ begin
   insert into category_activity select * from rolled_categories;
 
   create temp table rolled_authors on commit drop as
-    select distinct date_trunc('hour', bucket) as bucket, app_key, author
-    from app_authors where bucket < cutoff;
+    select date_trunc('hour', bucket) as bucket, app_key, author, bool_or(trusted) as trusted
+    from app_authors where bucket < cutoff group by 1, 2, 3;
   delete from app_authors where bucket < cutoff;
-  insert into app_authors select * from rolled_authors;
+  insert into app_authors (bucket, app_key, author, trusted)
+    select bucket, app_key, author, trusted from rolled_authors;
 end;
 $$;
 
 revoke execute on function rollup_old_buckets(integer) from public, anon, authenticated;
 
--- Page: top apps by unique users (distinct authors) over the last `minutes`. Security
--- definer: it reads app_authors, which nobody can read directly; only counts come out.
+-- Page: top apps by unique users (distinct trusted authors) over the last `minutes`.
+-- Security definer: it reads app_authors, which nobody can read directly; only counts come out.
 create or replace function top_apps_by_users(minutes integer, max_rows integer default 10)
 returns table (app_key text, name text, website text, icon text, users bigint)
 language sql stable security definer set search_path = public as $$
   select u.app_key, coalesce(i.name, u.app_key), i.website, i.icon, count(distinct u.author)
   from app_authors u
   left join apps i on i.app_key = u.app_key
-  where u.bucket > now() - make_interval(mins => minutes)
+  where u.bucket > now() - make_interval(mins => minutes) and u.trusted
   group by u.app_key, i.name, i.website, i.icon
   order by 5 desc
   limit max_rows;
 $$;
 
--- Page: one app's unique users over the last hour / 24 h / 7 days.
+-- Page: one app's unique (trusted) users over the last hour / 24 h / 7 days.
 create or replace function app_users(key text)
 returns table (hour bigint, day bigint, week bigint)
 language sql stable security definer set search_path = public as $$
@@ -347,7 +357,7 @@ language sql stable security definer set search_path = public as $$
          count(distinct author) filter (where bucket > now() - interval '24 hours'),
          count(distinct author)
   from app_authors
-  where app_key = key and bucket > now() - interval '7 days';
+  where app_key = key and bucket > now() - interval '7 days' and trusted;
 $$;
 
 -- Runs the rollup every day at 04:17 UTC (pg_cron; scheduling the same name again updates it).

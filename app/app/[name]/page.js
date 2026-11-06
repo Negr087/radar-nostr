@@ -103,11 +103,15 @@ export default async function AppPage({ params }) {
           <Link href={`/?app=${app.slug}`} className="app-button">
             Watch it live on the radar →
           </Link>
+          <Link href={`/compare?a=${app.slug}`} className="app-button secondary">
+            Compare with another app
+          </Link>
         </div>
 
         <p className="detail-note">
           Events signed with a <code>{app.name}</code> client tag (NIP-89), counted 24/7 from
-          public relays, bots filtered out. Users: different accounts behind those events. On the radar since {since}. Updated every few
+          public relays, bots filtered out. Users: different accounts behind those events that the
+          Nostr network follows. On the radar since {since}. Updated every few
           minutes.
         </p>
       </section>

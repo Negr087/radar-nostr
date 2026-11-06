@@ -10,6 +10,7 @@ import Bubbles from "@/components/Bubbles";
 import Feed from "@/components/Feed";
 import Pulse from "@/components/Pulse";
 import Ranking from "@/components/Ranking";
+import TvMode, { parseTv } from "@/components/TvMode";
 import Zaps from "@/components/Zaps";
 
 export default function Home() {
@@ -32,11 +33,14 @@ export default function Home() {
     .join("\n");
   const [filter, setFilter] = useState(null);
   const [selected, setSelected] = useState(null);
+  const [tv, setTv] = useState(null);
   // /?app=primal (the "watch it live" link on an app's page) opens that app's details.
+  // /?tv switches to TV mode (see components/TvMode.js).
   useEffect(() => {
-    const name = new URLSearchParams(window.location.search).get("app");
-    const slug = normalizeName(name);
+    const params = new URLSearchParams(window.location.search);
+    const slug = normalizeName(params.get("app"));
     if (slug) setSelected(`app:${slug}`);
+    if (params.has("tv")) setTv(parseTv(params.get("tv")));
   }, []);
   // Stored info for an app opened from the ranking that this browser hasn't seen live.
   const rankedInfo = ["events", "sats", "users", "new"]
@@ -44,6 +48,22 @@ export default function Home() {
     .find((r) => r.key === selected);
   const closeDetail = useCallback(() => setSelected(null), []);
   const pct = stats.total ? Math.round((stats.tagged / stats.total) * 100) : 0;
+
+  if (tv) {
+    return (
+      <TvMode
+        tv={tv}
+        apps={apps}
+        ranking={ranking}
+        zaps={zaps}
+        zapStats={zapStats}
+        profiles={profiles}
+        getApp={getApp}
+        stats={stats}
+        worker={worker}
+      />
+    );
+  }
 
   return (
     <main>
@@ -107,7 +127,8 @@ export default function Home() {
 
       <footer>
         Only events with a <code>client</code> tag (NIP-89) are attributed to an app. The rest are
-        classified by event kind. Built with NDK.
+        classified by event kind. Built with NDK. ·{" "}
+        <a href="/compare">Compare apps</a> · <a href="/?tv">TV mode</a>
       </footer>
 
       {selected && (

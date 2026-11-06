@@ -137,8 +137,10 @@ export default function Bubbles({ apps, onSelect, selected }) {
     <div className="bubbles" ref={boxRef}>
       {!list.length && (
         <div className="empty">
-          Listening to relays… apps that sign their events with the <code>client</code> tag will
-          show up here.
+          <span>
+            Listening to relays… apps that sign their events with the <code>client</code> tag
+            will show up here.
+          </span>
         </div>
       )}
       {list.map((a) => {
