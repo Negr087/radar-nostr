@@ -37,6 +37,14 @@ main { max-width: 1320px; margin: 0 auto; padding: 20px 16px 40px; display: flex
 .stats { display: flex; gap: 8px; flex-wrap: wrap; }
 .stats div { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; display: flex; flex-direction: column; min-width: 78px; }
 .stats b { font-family: "JetBrains Mono", monospace; font-size: 18px; }
+/* Section nav under the header */
+.site-nav { display: flex; gap: 6px; flex-wrap: wrap; }
+.site-nav a { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); color: var(--text); font-weight: 600; font-size: 13px; transition: border-color 0.15s, background 0.15s; }
+.site-nav a span { color: var(--accent); }
+.site-nav a:hover, .site-nav a:focus-visible { border-color: var(--accent); }
+.site-nav a.active { background: var(--panel-2); border-color: var(--accent); }
+@media (max-width: 480px) { .site-nav a { flex: 1 1 auto; justify-content: center; padding: 8px 10px; } }
+
 .stats span { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
 
 /* Panels */

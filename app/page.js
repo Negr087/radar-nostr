@@ -85,6 +85,12 @@ export default function Home() {
         </div>
       </header>
 
+      <nav className="site-nav" aria-label="Sections">
+        <a href="/" className="active" aria-current="page"><span aria-hidden="true">◉</span> Live radar</a>
+        <a href="/compare"><span aria-hidden="true">⇄</span> Compare apps</a>
+        <a href="/?tv"><span aria-hidden="true">▣</span> TV mode</a>
+      </nav>
+
       <section className="grid">
         <div className="panel">
           <h2>Active apps <small>last 5 min · tap one for details</small></h2>
@@ -127,8 +133,7 @@ export default function Home() {
 
       <footer>
         Only events with a <code>client</code> tag (NIP-89) are attributed to an app. The rest are
-        classified by event kind. Built with NDK. ·{" "}
-        <a href="/compare">Compare apps</a> · <a href="/?tv">TV mode</a>
+        classified by event kind. Built with NDK.
       </footer>
 
       {selected && (
