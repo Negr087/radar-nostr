@@ -467,13 +467,15 @@ language sql stable as $$
 $$;
 
 -- Page: one app's events per platform over the last `minutes`, plus its total, so the
--- page can show how much didn't say.
+-- page can show how much didn't say. The total only counts from the first stored platform
+-- bucket: before it the worker didn't record platforms, and it would all read as unstated.
 create or replace function app_platforms(key text, minutes integer default 10080)
 returns table (platform text, events bigint, total bigint)
 language sql stable as $$
   select p.platform, sum(p.events)::bigint,
          (select coalesce(sum(a.events), 0)::bigint from app_activity a
-          where a.app_key = key and a.bucket > now() - make_interval(mins => minutes))
+          where a.app_key = key and a.bucket > now() - make_interval(mins => minutes)
+            and a.bucket >= (select min(bucket) from platform_activity))
   from platform_activity p
   where p.app_key = key and p.bucket > now() - make_interval(mins => minutes)
   group by p.platform
