@@ -205,6 +205,16 @@ test("app data (30078) counts for its app but stays out of the feed", () => {
   assert.equal(r.showInFeed, false);
 });
 
+test("content discovery requests (5300) count as DVM activity but not for their app", () => {
+  const engine = createEngine();
+  const r = engine.classify(ev({ kind: 5300, tags: [["client", "Snort"]] }));
+  assert.equal(r.appKey, null);
+  assert.equal(r.cat, "dvm");
+  assert.equal(r.showInFeed, false);
+  // Other DVM jobs still count for the app that sent them.
+  assert.equal(engine.classify(ev({ kind: 5050, tags: [["client", "Snort"]] })).appKey, "app:snort");
+});
+
 test("malformed 31990 addresses in client tags are never fetched", () => {
   const asked = [];
   const engine = createEngine({ fetchListing: (f) => (asked.push(f), Promise.resolve(null)) });
