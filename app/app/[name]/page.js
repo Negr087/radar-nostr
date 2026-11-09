@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import Avatar from "@/components/Avatar";
-import { loadAppPage } from "@/lib/appPage";
+import Heatmap from "@/components/Heatmap";
+import { HEATMAP_DAYS, loadAppPage } from "@/lib/appPage";
 import { compactSats } from "@/lib/format";
 import { normalizeName } from "@/lib/knownApps";
 
@@ -9,6 +10,7 @@ import { normalizeName } from "@/lib/knownApps";
 export const revalidate = 300;
 
 const num = (n) => n.toLocaleString("en-US");
+const PLATFORM_NAMES = { android: "Android", ios: "iOS", web: "Web", desktop: "Desktop" };
 
 // One line for search results and link previews.
 function describe(app) {
@@ -99,6 +101,88 @@ export default async function AppPage({ params }) {
           ))}
         </div>
 
+        {app.retention && (app.retention.day != null || app.retention.week != null) && (
+          <>
+            <h3>Coming back <small>users who return</small></h3>
+            <div className="detail-stats app-stats retention-stats">
+              {app.retention.day != null && (
+                <div title={`Of ${num(app.retention.dayBefore)} users the day before`}>
+                  <b>{app.retention.day}%</b>
+                  <span>of yesterday&apos;s users came back today</span>
+                </div>
+              )}
+              {app.retention.week != null && (
+                <div title={`Of ${num(app.retention.weekBefore)} users the week before`}>
+                  <b>{app.retention.week}%</b>
+                  <span>of last week&apos;s users came back this week</span>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {app.overlap.length > 0 && (
+          <>
+            <h3>Its users also use <small>share of {app.name}&apos;s users, 7 days</small></h3>
+            <ul className="overlap-list">
+              {app.overlap.map((o) => {
+                const body = (
+                  <>
+                    <Avatar src={o.pictures} seed={o.key} label={o.name} size={28} rounded="28%" />
+                    <span className="overlap-name">{o.name}</span>
+                    <span className="overlap-bar" aria-hidden="true">
+                      <span style={{ width: `${o.share}%` }} />
+                    </span>
+                    <b>{o.share}%</b>
+                  </>
+                );
+                return (
+                  <li key={o.key} title={`${num(o.shared)} users in common`}>
+                    {o.slug ? <Link href={`/app/${o.slug}`}>{body}</Link> : <div>{body}</div>}
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
+
+        {app.platforms && (
+          <>
+            <h3>Platforms <small>share of events, 7 days, from the client name</small></h3>
+            <ul className="overlap-list platform-list">
+              {app.platforms.list.map((p) => (
+                <li key={p.platform} title={`${num(p.events)} events`}>
+                  <div>
+                    <span className="overlap-name">{PLATFORM_NAMES[p.platform] || p.platform}</span>
+                    <span className="overlap-bar" aria-hidden="true">
+                      <span style={{ width: `${p.share}%` }} />
+                    </span>
+                    <b>{p.share}%</b>
+                  </div>
+                </li>
+              ))}
+              {app.platforms.unstated > 0 && (
+                <li className="muted-row">
+                  <div>
+                    <span className="overlap-name">Didn&apos;t say</span>
+                    <span className="overlap-bar" aria-hidden="true">
+                      <span style={{ width: `${app.platforms.unstated}%` }} />
+                    </span>
+                    <b>{app.platforms.unstated}%</b>
+                  </div>
+                </li>
+              )}
+            </ul>
+          </>
+        )}
+
+        {app.heat && (
+          <>
+            <h3>When it&apos;s used <small>events by weekday and hour (UTC), last {HEATMAP_DAYS} days</small></h3>
+            <Heatmap grid={app.heat} />
+          </>
+        )}
+
         <div className="app-actions">
           <Link href={`/?app=${app.slug}`} className="app-button">
             Watch it live on the radar →
@@ -111,8 +195,9 @@ export default async function AppPage({ params }) {
         <p className="detail-note">
           Events signed with a <code>{app.name}</code> client tag (NIP-89), counted 24/7 from
           public relays, bots filtered out. Users: different accounts behind those events that the
-          Nostr network follows. On the radar since {since}. Updated every few
-          minutes.
+          Nostr network follows. Users are never stored as accounts, only as anonymous ids, and
+          apps sharing fewer than 3 users aren&apos;t listed. On the radar since {since}. Updated
+          every few minutes.
         </p>
       </section>
     </main>

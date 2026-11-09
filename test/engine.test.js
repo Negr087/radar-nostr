@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isBlockedAppKey, isBotClient, isBotProfile, setExtraBlocks } from "../lib/bots.js";
 import { createEngine } from "../lib/engine.js";
-import { normalizeName } from "../lib/knownApps.js";
+import { normalizeName, platformOf } from "../lib/knownApps.js";
 import { bolt11Sats } from "../lib/nostr.js";
 
 let nextId = 0;
@@ -213,6 +213,20 @@ test("content discovery requests (5300) count as DVM activity but not for their 
   assert.equal(r.showInFeed, false);
   // Other DVM jobs still count for the app that sent them.
   assert.equal(engine.classify(ev({ kind: 5050, tags: [["client", "Snort"]] })).appKey, "app:snort");
+});
+
+test("platformOf reads the platform from the client name", () => {
+  assert.equal(platformOf("Primal iOS"), "ios");
+  assert.equal(platformOf("Primal Web"), "web");
+  assert.equal(platformOf("Nostr Vault on Android"), "android");
+  assert.equal(platformOf("Amethyst"), null);
+  assert.equal(platformOf("Webby"), null); // whole words only
+});
+
+test("records carry the platform only for the app the client tag named", () => {
+  const engine = createEngine();
+  assert.equal(engine.classify(ev({ tags: [["client", "Primal iOS"]] })).platform, "ios");
+  assert.equal(engine.classify(ev({ tags: [["client", "Damus"]] })).platform, null);
 });
 
 test("malformed 31990 addresses in client tags are never fetched", () => {

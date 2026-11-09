@@ -28,6 +28,7 @@ export function buildRows(records, lookupApp, hashAuthor, isTrusted) {
   const zaps = new Map(); // "bucket|key" -> {zaps, sats}
   const categories = new Map(); // "bucket|cat" -> events
   const authors = new Map(); // "bucket|key|hash" -> row
+  const platforms = new Map(); // "bucket|key|platform" -> events
   const seenApps = new Set();
 
   for (const r of records) {
@@ -38,6 +39,10 @@ export function buildRows(records, lookupApp, hashAuthor, isTrusted) {
       const k = `${bucket}|${r.appKey}`;
       apps.set(k, (apps.get(k) || 0) + 1);
       seenApps.add(r.appKey);
+      if (r.platform) {
+        const p = `${k}|${r.platform}`;
+        platforms.set(p, (platforms.get(p) || 0) + 1);
+      }
       if (hashAuthor && r.actor) {
         const author = hashAuthor(r.actor);
         const row = { bucket, app_key: r.appKey, author };
@@ -73,6 +78,11 @@ export function buildRows(records, lookupApp, hashAuthor, isTrusted) {
       return { bucket, category, events };
     }),
     authors: [...authors.values()],
+    platforms: [...platforms].map(([k, events]) => {
+      const [bucket, rest] = split(k);
+      const i = rest.lastIndexOf("|");
+      return { bucket, app_key: rest.slice(0, i), platform: rest.slice(i + 1), events };
+    }),
     app_info: [...seenApps].map((app_key) => {
       const info = lookupApp(app_key);
       return {
@@ -112,6 +122,11 @@ export function mergeRows(base, extra) {
       (r) => `${r.bucket}|${r.app_key}|${r.author}`,
       []
     ),
+    platforms: sumBy(
+      [...(base.platforms || []), ...(extra.platforms || [])],
+      (r) => `${r.bucket}|${r.app_key}|${r.platform}`,
+      ["events"]
+    ),
     app_info: [...latest.values()],
   };
 }
@@ -121,4 +136,5 @@ export const isEmpty = (rows) =>
   !rows.zaps.length &&
   !rows.categories.length &&
   !rows.authors.length &&
+  !(rows.platforms || []).length &&
   !rows.app_info.length;

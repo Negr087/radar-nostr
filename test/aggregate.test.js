@@ -81,3 +81,20 @@ test("isEmpty", () => {
   assert.equal(isEmpty(buildRows([], lookupApp)), true);
   assert.equal(isEmpty(buildRows([rec({})], lookupApp)), false);
 });
+
+test("platforms: events per app and platform, merged on retry", () => {
+  const recs = [
+    rec({ appKey: "app:primal", platform: "ios" }),
+    rec({ appKey: "app:primal", platform: "ios" }),
+    rec({ appKey: "app:primal", platform: "web" }),
+    rec({ appKey: "app:primal" }), // didn't say: no platform row
+  ];
+  const rows = buildRows(recs, lookupApp);
+  const events = (rs, p) => rs.find((r) => r.platform === p)?.events;
+  assert.equal(rows.platforms.length, 2);
+  assert.equal(events(rows.platforms, "ios"), 2);
+  assert.equal(events(rows.platforms, "web"), 1);
+  assert.equal(rows.platforms[0].app_key, "app:primal");
+  const merged = mergeRows(rows, buildRows([rec({ appKey: "app:primal", platform: "ios" })], lookupApp));
+  assert.equal(events(merged.platforms, "ios"), 3);
+});

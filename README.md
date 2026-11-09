@@ -42,9 +42,9 @@ On startup it preloads ~500 kind 31990 listings (to recognize zaps to apps) and 
 - `components/Zaps.js`: zap stream with every zap (not only app-related ones), newest on top, bigger zaps glow more.
 - `components/Pulse.js`: bars stacked by category: per minute live, or the stored history for 24 h / 7 days; the legend filters the feed.
 - `app/opengraph-image.js` / `app/icon.js`: share preview image and tab icon, generated at build time.
-- `app/compare/` / `lib/comparePage.js`: two apps side by side (`/compare?a=primal&b=damus`): users, events, zaps and rank, plus their 24 h and 7 day curves (`components/LineChart.js`, plain SVG rendered on the server). With no apps given it compares today's top two.
+- `app/compare/` / `lib/comparePage.js`: two apps side by side (`/compare?a=primal&b=damus`): users, events, zaps and rank, how many users they share, plus their 24 h and 7 day curves (`components/LineChart.js`, plain SVG rendered on the server). With no apps given it compares today's top two.
 - `components/TvMode.js`: kiosk / TV mode (`/?tv`): full screen, rotating between the bubbles, the ranking (24 h by users and by sats) and the zap stream. `/?tv=45` sets the seconds per view, `/?tv=zaps` (or `bubbles`, `ranking`) stays on one. Remote or keyboard: ← → change view, OK / Enter pauses, F (or double click) goes full screen. It keeps the screen awake where the browser allows it.
-- `app/app/[name]/`: each app's own page (`/app/primal`) with its numbers, today's rank, a 24 h chart and its own share image, rebuilt at most every 5 minutes (`lib/appPage.js` loads the data). `/?app=primal` opens that app's details on the radar.
+- `app/app/[name]/`: each app's own page (`/app/primal`) with its numbers, today's rank, a 24 h chart, how many users come back (day over day and week over week), the other apps its users also use, its platform split (from client names like "Primal iOS"; apps don't send versions), a weekday × hour heatmap (`components/Heatmap.js`) and its own share image, rebuilt at most every 5 minutes (`lib/appPage.js` loads the data). `/?app=primal` opens that app's details on the radar.
 
 ## Worker (v2)
 

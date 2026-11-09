@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import Avatar from "@/components/Avatar";
 import LineChart from "@/components/LineChart";
 import { compactSats } from "@/lib/format";
-import { loadChoices, loadCompared, pickSlugs } from "@/lib/comparePage";
+import { loadChoices, loadCompared, loadShared, pickSlugs } from "@/lib/comparePage";
 
 // Two apps side by side: /compare?a=primal&b=damus. With no apps given, today's top two.
 
@@ -29,7 +29,7 @@ async function load(searchParams) {
   const choices = await loadChoices();
   const [slugA, slugB] = pickSlugs(first(params.a), first(params.b), choices);
   const [a, b] = await Promise.all([loadCompared(slugA), loadCompared(slugB)]);
-  return { params, choices, slugA, slugB, a, b };
+  return { params, choices, slugA, slugB, a, b, shared: await loadShared(a, b) };
 }
 
 export async function generateMetadata({ searchParams }) {
@@ -112,7 +112,7 @@ const dayLabel = (t) => {
 };
 
 export default async function ComparePage({ searchParams }) {
-  const { params, choices, slugA, slugB, a, b } = await load(searchParams);
+  const { params, choices, slugA, slugB, a, b, shared } = await load(searchParams);
   // One address per pair: ?a=Primal%20Android -> ?a=primal
   const asked = [first(params.a), first(params.b)];
   if (asked.every(Boolean) && (asked[0] !== slugA || asked[1] !== slugB)) {
@@ -171,6 +171,14 @@ export default async function ComparePage({ searchParams }) {
                 <Row key={row.label} row={row} a={a} b={b} />
               ))}
             </div>
+
+            {shared && (
+              <p className="compare-shared">
+                <b>{num(shared.shared)}</b> users used both in the last 7 days:{" "}
+                <span style={{ color: COLORS[0] }}>{shared.ofA}% of {a.name}&apos;s</span> and{" "}
+                <span style={{ color: COLORS[1] }}>{shared.ofB}% of {b.name}&apos;s</span>.
+              </p>
+            )}
 
             <h3>Last 24 hours <small>events per hour</small></h3>
             <LineChart series={series("points")} timeLabel={hourLabel} label="Events per hour, last 24 hours" />

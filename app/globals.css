@@ -335,3 +335,27 @@ footer a { color: var(--accent); }
 @media (prefers-reduced-motion: reduce) { .tv-view { animation: none; } .tv-progress { animation: none; display: none; } }
 .tv .empty { font-size: 1.5vw; }
 @media (max-width: 600px) { .line-chart-axis span:nth-child(even) { display: none; } }
+
+/* App page: overlap / platform bars, retention, heatmap */
+.overlap-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.overlap-list li > a, .overlap-list li > div { display: grid; grid-template-columns: 28px minmax(0, 9em) 1fr 3.2em; align-items: center; gap: 10px; padding: 4px 6px; border-radius: 8px; }
+.platform-list li > div { grid-template-columns: minmax(0, 9em) 1fr 3.2em; }
+.overlap-list li > a:hover { background: var(--panel-2); }
+.overlap-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.overlap-bar { height: 8px; background: var(--panel-2); border-radius: 4px; overflow: hidden; }
+.overlap-bar span { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+.overlap-list b { font-family: "JetBrains Mono", monospace; text-align: right; }
+.muted-row { color: var(--muted); }
+.muted-row .overlap-bar span { background: var(--line); }
+.app-page .retention-stats { grid-template-columns: repeat(2, 1fr); }
+.app-page .retention-stats span { text-transform: none; letter-spacing: 0; font-size: 12px; }
+
+.heatmap { display: flex; flex-direction: column; gap: 2px; }
+.heat-row { display: grid; grid-template-columns: 2.6em repeat(24, minmax(0, 1fr)); gap: 2px; align-items: center; }
+.heat-day { color: var(--muted); font-size: 11px; }
+.heat-cell { aspect-ratio: 1; border-radius: 2px; background: var(--accent); }
+.heat-cell[data-empty] { background: var(--panel-2); }
+.heat-axis span { color: var(--muted); font-size: 10px; white-space: nowrap; overflow: visible; }
+@media (max-width: 480px) { .heat-row { gap: 1px; } .heat-cell { border-radius: 1px; } }
+.compare-shared { margin: 0; text-align: center; color: var(--muted); }
+.compare-shared b { color: var(--text); font-family: "JetBrains Mono", monospace; }

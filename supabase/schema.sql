@@ -73,10 +73,28 @@ alter table app_authors enable row level security;
 -- Only trusted authors count as users. Rows from before this column count as trusted.
 alter table app_authors add column if not exists trusted boolean not null default true;
 
+-- Events per platform, for apps whose client name says it ("Primal iOS", "Primal Web").
+-- Only events that named a platform: the rest of the app's events didn't say.
+create table if not exists platform_activity (
+  bucket timestamptz not null,
+  app_key text not null,
+  platform text not null,
+  events integer not null default 0,
+  primary key (bucket, app_key, platform)
+);
+
+alter table platform_activity enable row level security;
+drop policy if exists "public read" on platform_activity;
+create policy "public read" on platform_activity for select using (true);
+
+-- For the user overlap and retention functions below.
+create index if not exists app_authors_app_bucket on app_authors (app_key, bucket);
+create index if not exists app_authors_author on app_authors (author);
+
 -- Worker: adds one flush worth of counts (increments, so several flushes can share a bucket).
 -- rows: {"apps":[{bucket,app_key,events}], "zaps":[{bucket,app_key,zaps,sats}],
 --        "categories":[{bucket,category,events}], "authors":[{bucket,app_key,author,trusted?}],
---        "app_info":[{app_key,name,website,icon}]}
+--        "platforms":[{bucket,app_key,platform,events}], "app_info":[{app_key,name,website,icon}]}
 create or replace function add_activity(rows jsonb) returns void
 language sql as $$
   insert into app_activity (bucket, app_key, events)
@@ -104,6 +122,12 @@ language sql as $$
   on conflict (bucket, app_key, author) do update
     set trusted = app_authors.trusted or excluded.trusted
     where not app_authors.trusted and excluded.trusted;
+
+  insert into platform_activity (bucket, app_key, platform, events)
+  select (r->>'bucket')::timestamptz, r->>'app_key', r->>'platform', (r->>'events')::int
+  from jsonb_array_elements(coalesce(rows->'platforms', '[]')) r
+  on conflict (bucket, app_key, platform) do update
+    set events = platform_activity.events + excluded.events;
 
   insert into apps (app_key, name, website, icon)
   select r->>'app_key', r->>'name', r->>'website', r->>'icon'
@@ -324,6 +348,12 @@ begin
   delete from category_activity where bucket < cutoff;
   insert into category_activity select * from rolled_categories;
 
+  create temp table rolled_platforms on commit drop as
+    select date_trunc('hour', bucket) as bucket, app_key, platform, sum(events)::integer as events
+    from platform_activity where bucket < cutoff group by 1, 2, 3;
+  delete from platform_activity where bucket < cutoff;
+  insert into platform_activity select * from rolled_platforms;
+
   create temp table rolled_authors on commit drop as
     select date_trunc('hour', bucket) as bucket, app_key, author, bool_or(trusted) as trusted
     from app_authors where bucket < cutoff group by 1, 2, 3;
@@ -358,6 +388,96 @@ language sql stable security definer set search_path = public as $$
          count(distinct author)
   from app_authors
   where app_key = key and bucket > now() - interval '7 days' and trusted;
+$$;
+
+-- Page: the apps an app's users also use, over the last `minutes`: for each other app, how
+-- many of this app's (trusted) users were seen there too, out of `users` in total. Apps
+-- sharing fewer than 3 users are left out, so no row points at a handful of accounts.
+create or replace function app_overlap(key text, minutes integer default 10080, max_rows integer default 6)
+returns table (app_key text, name text, website text, icon text, shared bigint, users bigint)
+language sql stable security definer set search_path = public as $$
+  with mine as (
+    select distinct author from app_authors
+    where app_key = key and trusted and bucket > now() - make_interval(mins => minutes)
+  )
+  select o.app_key, coalesce(i.name, o.app_key), i.website, i.icon,
+         count(distinct o.author), (select count(*) from mine)
+  from app_authors o
+  join mine m on m.author = o.author
+  left join apps i on i.app_key = o.app_key
+  where o.app_key <> key and o.trusted and o.bucket > now() - make_interval(mins => minutes)
+  group by o.app_key, i.name, i.website, i.icon
+  having count(distinct o.author) >= 3
+  order by 5 desc
+  limit max_rows;
+$$;
+
+-- Page: users two apps share over the last `minutes` (for /compare).
+create or replace function shared_users(a text, b text, minutes integer default 10080)
+returns table (users_a bigint, users_b bigint, shared bigint)
+language sql stable security definer set search_path = public as $$
+  with x as (
+    select distinct app_key, author from app_authors
+    where app_key in (a, b) and trusted and bucket > now() - make_interval(mins => minutes)
+  )
+  select count(*) filter (where app_key = a),
+         count(*) filter (where app_key = b),
+         (select count(*) from (select author from x group by author having count(*) = 2) s)
+  from x;
+$$;
+
+-- Page: how many of an app's (trusted) users come back. `day_before`: users of the
+-- 24 h before the last 24 h; `day_back`: how many of them were seen in the last 24 h.
+-- The same for weeks. Only complete buckets: the current one may still be filling.
+create or replace function app_retention(key text)
+returns table (day_before bigint, day_back bigint, week_before bigint, week_back bigint)
+language sql stable security definer set search_path = public as $$
+  with w as (
+    select to_timestamp(floor(extract(epoch from now() - interval '6 minutes') / 600) * 600) as e
+  ), u as (
+    select author,
+           bool_or(bucket >= w.e - interval '1 day') as d0,
+           bool_or(bucket >= w.e - interval '2 days' and bucket < w.e - interval '1 day') as d1,
+           bool_or(bucket >= w.e - interval '7 days') as w0,
+           bool_or(bucket < w.e - interval '7 days') as w1
+    from app_authors, w
+    where app_key = key and trusted and bucket >= w.e - interval '14 days' and bucket < w.e
+    group by author
+  )
+  select count(*) filter (where d1), count(*) filter (where d1 and d0),
+         count(*) filter (where w1), count(*) filter (where w1 and w0)
+  from u;
+$$;
+
+-- Page: activity by weekday (0 = Sunday) and hour (UTC) over the last `days`: one app's
+-- events, or every event the radar counted when `key` is null.
+create or replace function activity_heatmap(key text default null, days integer default 28)
+returns table (dow integer, hour integer, events bigint)
+language sql stable as $$
+  select extract(dow from bucket at time zone 'UTC')::integer,
+         extract(hour from bucket at time zone 'UTC')::integer, sum(n)::bigint
+  from (
+    select a.bucket, a.events as n from app_activity a
+    where key is not null and a.app_key = key and a.bucket > now() - make_interval(days => days)
+    union all
+    select c.bucket, c.events from category_activity c
+    where key is null and c.bucket > now() - make_interval(days => days)
+  ) x
+  group by 1, 2;
+$$;
+
+-- Page: one app's events per platform over the last `minutes`, plus its total, so the
+-- page can show how much didn't say.
+create or replace function app_platforms(key text, minutes integer default 10080)
+returns table (platform text, events bigint, total bigint)
+language sql stable as $$
+  select p.platform, sum(p.events)::bigint,
+         (select coalesce(sum(a.events), 0)::bigint from app_activity a
+          where a.app_key = key and a.bucket > now() - make_interval(mins => minutes))
+  from platform_activity p
+  where p.app_key = key and p.bucket > now() - make_interval(mins => minutes)
+  group by p.platform
+  order by 2 desc;
 $$;
 
 -- Runs the rollup every day at 04:17 UTC (pg_cron; scheduling the same name again updates it).
