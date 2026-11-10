@@ -205,6 +205,27 @@ test("app data (30078) counts for its app but stays out of the feed", () => {
   assert.equal(r.showInFeed, false);
 });
 
+test("a replaceable event re-saved at the same address counts once per window", () => {
+  const engine = createEngine();
+  const now = 1_800_000_000_000 - (1_800_000_000_000 % (10 * 60 * 1000)); // a window's start
+  const save = (pubkey = PK(1), d = "library") =>
+    ev({ kind: 30078, pubkey, tags: [["d", d], ["client", "ostrify.studio314.us"]] });
+  assert.ok(engine.classify(save(), { now }));
+  for (let i = 0; i < 50; i++) assert.equal(engine.classify(save(), { now: now + i * 1000 }), null);
+  assert.equal(engine.counters.republished, 50);
+  // Another address, or another author, still counts.
+  assert.ok(engine.classify(save(PK(1), "settings"), { now }));
+  assert.ok(engine.classify(save(PK(2)), { now }));
+  // The next window counts it again.
+  assert.ok(engine.classify(save(), { now: now + 10 * 60 * 1000 }));
+  // Plain replaceable kinds (no d tag) too: a contact list re-saved.
+  assert.ok(engine.classify(ev({ kind: 3 }), { now }));
+  assert.equal(engine.classify(ev({ kind: 3 }), { now }), null);
+  // Regular events are never merged.
+  assert.ok(engine.classify(ev({ kind: 1 }), { now }));
+  assert.ok(engine.classify(ev({ kind: 1 }), { now }));
+});
+
 test("content discovery requests (5300) count as DVM activity but not for their app", () => {
   const engine = createEngine();
   const r = engine.classify(ev({ kind: 5300, tags: [["client", "Snort"]] }));
