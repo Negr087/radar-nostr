@@ -18,7 +18,7 @@ import {
 } from "../lib/relays.js";
 import { authorHasher } from "./aggregate.js";
 import { createPipeline } from "./pipeline.js";
-import { revive } from "./relayKeeper.js";
+import { revive } from "../lib/relayKeeper.js";
 import { createSupabase } from "./supabase.js";
 import { DEFAULT_SEEDS, createTrust } from "./wot.js";
 

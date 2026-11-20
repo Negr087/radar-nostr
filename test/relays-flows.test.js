@@ -167,7 +167,7 @@ const fakeRelay = ({ status, wsState, retry = false }) => {
 };
 
 test("revive reconnects only relays NDK left down with nothing scheduled", async () => {
-  const { isAbandoned, revive } = await import("../worker/relayKeeper.js");
+  const { isAbandoned, revive } = await import("../lib/relayKeeper.js");
   const up = fakeRelay({ status: 5, wsState: 1 });
   const retrying = fakeRelay({ status: 1, wsState: 3, retry: true });
   const connecting = fakeRelay({ status: 4, wsState: 0 });
