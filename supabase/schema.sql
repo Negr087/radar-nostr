@@ -670,6 +670,17 @@ create policy "public read" on app_flows for select using (true);
 create policy "public read" on app_flow_totals for select using (true);
 create policy "public read" on flows_status for select using (true);
 
+-- When the web of trust started: the first bucket with an author it didn't trust. Before it
+-- every author row counts as trusted (the column's default), so user counts from then would
+-- include accounts it now leaves out. Null if it never ran.
+create or replace function trust_since()
+returns timestamptz
+language sql stable security definer set search_path = public as $$
+  select min(bucket) from app_authors where not trusted;
+$$;
+
+revoke execute on function trust_since() from public, anon, authenticated;
+
 -- A user "moved from A to B" when they used A the period before and not since, and B since
 -- and not before. Someone who left A for B and C counts in both flows. Only trusted users.
 create or replace function refresh_app_flows(window_days integer default 7)
@@ -679,11 +690,14 @@ declare
   e timestamptz := to_timestamp(floor(extract(epoch from now() - interval '6 minutes') / 600) * 600);
   mid timestamptz := e - make_interval(days => window_days);
   s timestamptz := e - make_interval(days => 2 * window_days);
+  -- Buckets from before the web of trust don't count: they read as missing, so a period
+  -- starting before it shows as incomplete.
+  ts timestamptz := greatest(s, coalesce(trust_since(), '-infinity'));
 begin
   create temp table flow_users on commit drop as
     select app_key, author, bool_or(bucket < mid) as was, bool_or(bucket >= mid) as now_
     from app_authors
-    where trusted and bucket >= s and bucket < e
+    where trusted and bucket >= ts and bucket < e
     group by app_key, author;
   create temp table flow_anyone on commit drop as
     select author, bool_or(was) as was, bool_or(now_) as now_ from flow_users group by author;
@@ -722,9 +736,9 @@ begin
          (select count(*) filter (where now_) from flow_anyone),
          (select count(*) filter (where was and now_) from flow_anyone),
          (select count(distinct bucket) filter (where bucket < mid) from category_activity
-           where bucket >= s and bucket < e)::real / (window_days * 144),
+           where bucket >= ts and bucket < e)::real / (window_days * 144),
          (select count(distinct bucket) filter (where bucket >= mid) from category_activity
-           where bucket >= s and bucket < e)::real / (window_days * 144)
+           where bucket >= ts and bucket < e)::real / (window_days * 144)
   on conflict (id) do update
     set computed_at = excluded.computed_at, window_start = excluded.window_start,
         window_mid = excluded.window_mid, window_end = excluded.window_end,
@@ -788,6 +802,7 @@ $$;
 -- rollup by refresh_network_daily(). `users`: different trusted accounts seen on any app
 -- that day (and over the 7 / 30 days up to it); `events`: every counted event; `apps`:
 -- apps with at least 10 events; `coverage`: share of the day's hours the worker stored.
+-- The user counts are null when their period starts before the web of trust (trust_since).
 create table if not exists network_daily (
   day date primary key,
   users integer not null,
@@ -799,6 +814,10 @@ create table if not exists network_daily (
   apps integer not null,
   coverage real not null
 );
+
+alter table network_daily alter column users drop not null;
+alter table network_daily alter column users_7d drop not null;
+alter table network_daily alter column users_30d drop not null;
 
 alter table network_daily enable row level security;
 drop policy if exists "public read" on network_daily;
@@ -814,6 +833,7 @@ declare
   d date;
   t0 timestamptz;
   t1 timestamptz;
+  ts timestamptz := coalesce(trust_since(), '-infinity');
 begin
   for d in select generate_series(today - days, today - 1, interval '1 day')::date loop
     t0 := d::timestamp at time zone 'UTC';
@@ -823,11 +843,17 @@ begin
     insert into network_daily (day, users, users_7d, users_30d, events, zaps, sats, apps, coverage)
     values (
       d,
-      (select count(distinct author) from app_authors where trusted and bucket >= t0 and bucket < t1),
-      (select count(distinct author) from app_authors
-        where trusted and bucket >= t1 - interval '7 days' and bucket < t1),
-      (select count(distinct author) from app_authors
-        where trusted and bucket >= t1 - interval '30 days' and bucket < t1),
+      case when t0 >= ts then
+        (select count(distinct author) from app_authors where trusted and bucket >= t0 and bucket < t1)
+      end,
+      case when t1 - interval '7 days' >= ts then
+        (select count(distinct author) from app_authors
+          where trusted and bucket >= t1 - interval '7 days' and bucket < t1)
+      end,
+      case when t1 - interval '30 days' >= ts then
+        (select count(distinct author) from app_authors
+          where trusted and bucket >= t1 - interval '30 days' and bucket < t1)
+      end,
       (select coalesce(sum(events), 0) from category_activity where bucket >= t0 and bucket < t1),
       (select coalesce(sum(zaps), 0) from zap_activity where bucket >= t0 and bucket < t1),
       (select coalesce(sum(sats), 0) from zap_activity where bucket >= t0 and bucket < t1),

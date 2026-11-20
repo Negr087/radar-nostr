@@ -53,9 +53,11 @@ function Tile({ value, label, trend, title }) {
 
 export default async function StatePage() {
   const { live, days, month, gaps, categories, top, heat } = await loadState();
+  // Days without a value (users before the web of trust) are left out of that chart.
   const series = (key, label, color) => [
-    { label, color, points: days.map((d) => ({ t: d.t, events: d[key] })) },
+    { label, color, points: days.filter((d) => d[key] != null).map((d) => ({ t: d.t, events: d[key] })) },
   ];
+  const userDays = days.filter((d) => d.users != null).length;
 
   return (
     <main className="app-page wide-page">
@@ -97,8 +99,12 @@ export default async function StatePage() {
 
         {days.length >= 2 ? (
           <>
-            <h3>Active users <small>per day</small></h3>
-            <LineChart series={series("users", "Active users", ACCENT)} timeLabel={dayLabel} label="Active users per day" />
+            {userDays >= 2 && (
+              <>
+                <h3>Active users <small>per day</small></h3>
+                <LineChart series={series("users", "Active users", ACCENT)} timeLabel={dayLabel} label="Active users per day" />
+              </>
+            )}
 
             <h3>Events <small>per day</small></h3>
             <LineChart series={series("events", "Events", ACCENT)} timeLabel={dayLabel} label="Events per day" />
