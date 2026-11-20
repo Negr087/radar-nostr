@@ -25,6 +25,8 @@ export function createSupabase({ url, secretKey }) {
     addActivity: (rows) => rpc("add_activity", { rows }),
     heartbeat: ({ started, relays, relaysTotal }) =>
       rpc("worker_heartbeat", { started, relays, relays_total: relaysTotal }),
+    // [{relay, connected}] for every relay the worker listens to.
+    relayStatus: (rows) => rpc("relay_heartbeat", { rows }),
     listBlocks: () =>
       request("blocked_clients?select=pattern,match,reason,added_at&order=added_at", {
         method: "GET",

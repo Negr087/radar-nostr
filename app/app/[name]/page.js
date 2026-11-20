@@ -146,6 +146,41 @@ export default async function AppPage({ params }) {
           </>
         )}
 
+        {app.switches && (
+          <>
+            <h3>Switching <small>users who moved between apps, this week vs. the week before</small></h3>
+            <div className="switch-cols">
+              {[
+                ["in", "Came from"],
+                ["out", "Left for"],
+              ].map(([dir, title]) => (
+                <div key={dir}>
+                  <h4>{title}</h4>
+                  {app.switches[dir].length ? (
+                    <ul className="overlap-list switch-list">
+                      {app.switches[dir].map((o) => {
+                        const body = (
+                          <>
+                            <Avatar src={o.pictures} seed={o.key} label={o.name} size={24} rounded="28%" />
+                            <span className="overlap-name">{o.name}</span>
+                            <b>{num(o.users)}</b>
+                          </>
+                        );
+                        return (
+                          <li key={o.key}>{o.slug ? <Link href={`/app/${o.slug}`}>{body}</Link> : <div>{body}</div>}</li>
+                        );
+                      })}
+                    </ul>
+                  ) : (
+                    <p className="detail-note">No app with 3 or more.</p>
+                  )}
+                </div>
+              ))}
+            </div>
+            <Link href="/flows" className="detail-link">All app flows →</Link>
+          </>
+        )}
+
         {app.platforms && (
           <>
             <h3>Platforms <small>share of events, 7 days, from the client name</small></h3>

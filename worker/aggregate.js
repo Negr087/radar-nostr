@@ -1,6 +1,6 @@
 // Turns classified records (from lib/engine.js) into the rows add_activity() expects:
 // counts per 10 minute bucket, per app, per category, and zaps, plus each app's authors
-// (hashed) for unique user counts. Pure: no network.
+// (hashed) for unique user counts, and which relays delivered them. Pure: no network.
 
 import { createHash } from "node:crypto";
 
@@ -15,6 +15,10 @@ export function authorHasher(salt) {
     createHash("sha256").update(salt).update(pubkey).digest().readBigInt64BE(0).toString();
 }
 
+// A late copy of an event counts with at most this delay: after a reconnect a relay can
+// replay minutes-old events, which says nothing about how fast it usually is.
+export const MAX_LAG_MS = 60 * 1000;
+
 export function bucketOf(t) {
   return new Date(Math.floor(t / BUCKET_MS) * BUCKET_MS).toISOString();
 }
@@ -23,12 +27,15 @@ export function bucketOf(t) {
 // `hashAuthor` (from authorHasher): without it, no author rows.
 // `isTrusted(pubkey)` (worker/wot.js): marks each author row as followed by the network
 // or not; null (or no function) leaves `trusted` out, and the database takes it as trusted.
+// Records may carry `relays`: {url: delay in ms after the first relay that delivered it}.
 export function buildRows(records, lookupApp, hashAuthor, isTrusted) {
   const apps = new Map(); // "bucket|key" -> events
   const zaps = new Map(); // "bucket|key" -> {zaps, sats}
   const categories = new Map(); // "bucket|cat" -> events
   const authors = new Map(); // "bucket|key|hash" -> row
   const platforms = new Map(); // "bucket|key|platform" -> events
+  const relays = new Map(); // "bucket|relay" -> {events, fastest, solo, lag_ms}
+  const relayApps = new Map(); // "bucket|relay|key" -> events
   const seenApps = new Set();
 
   for (const r of records) {
@@ -49,6 +56,22 @@ export function buildRows(records, lookupApp, hashAuthor, isTrusted) {
         const trusted = isTrusted ? isTrusted(r.actor) : null;
         if (trusted != null) row.trusted = trusted;
         authors.set(`${k}|${author}`, row);
+      }
+    }
+    if (r.relays) {
+      const delivered = Object.entries(r.relays);
+      for (const [relay, delay] of delivered) {
+        const k = `${bucket}|${relay}`;
+        const s = relays.get(k) || { events: 0, fastest: 0, solo: 0, lag_ms: 0 };
+        s.events++;
+        if (delay === 0) s.fastest++;
+        else s.lag_ms += Math.min(delay, MAX_LAG_MS);
+        if (delivered.length === 1) s.solo++;
+        relays.set(k, s);
+        if (r.appKey) {
+          const a = `${k}|${r.appKey}`;
+          relayApps.set(a, (relayApps.get(a) || 0) + 1);
+        }
       }
     }
     if (r.zap) {
@@ -82,6 +105,16 @@ export function buildRows(records, lookupApp, hashAuthor, isTrusted) {
       const [bucket, rest] = split(k);
       const i = rest.lastIndexOf("|");
       return { bucket, app_key: rest.slice(0, i), platform: rest.slice(i + 1), events };
+    }),
+    relays: [...relays].map(([k, s]) => {
+      const [bucket, relay] = split(k);
+      return { bucket, relay, ...s };
+    }),
+    // Relay urls have no "|", app keys may: split at the first one after the bucket.
+    relay_apps: [...relayApps].map(([k, events]) => {
+      const [bucket, rest] = split(k);
+      const [relay, app_key] = split(rest);
+      return { bucket, relay, app_key, events };
     }),
     app_info: [...seenApps].map((app_key) => {
       const info = lookupApp(app_key);
@@ -127,6 +160,16 @@ export function mergeRows(base, extra) {
       (r) => `${r.bucket}|${r.app_key}|${r.platform}`,
       ["events"]
     ),
+    relays: sumBy(
+      [...(base.relays || []), ...(extra.relays || [])],
+      (r) => `${r.bucket}|${r.relay}`,
+      ["events", "fastest", "solo", "lag_ms"]
+    ),
+    relay_apps: sumBy(
+      [...(base.relay_apps || []), ...(extra.relay_apps || [])],
+      (r) => `${r.bucket}|${r.relay}|${r.app_key}`,
+      ["events"]
+    ),
     app_info: [...latest.values()],
   };
 }
@@ -137,4 +180,5 @@ export const isEmpty = (rows) =>
   !rows.categories.length &&
   !rows.authors.length &&
   !(rows.platforms || []).length &&
+  !(rows.relays || []).length &&
   !rows.app_info.length;

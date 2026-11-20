@@ -79,12 +79,15 @@ const profileQueue = new Set();
 const profilesChecked = new Set();
 const startedAt = new Date().toISOString();
 
-function handleEvent(ev, viaClient) {
+// Every relay the worker listens to, as stored (no trailing slash).
+const ALL_RELAYS = [...RELAYS, ZAPSTORE_RELAY].map(trimSlash);
+
+function handleEvent(ev, relay, viaClient) {
   pipeline.seen();
   // Live only, filed under arrival time (more reliable than other people's clocks).
   const r = engine.classify(ev, { now: Date.now(), viaClient });
   if (!r) return;
-  pipeline.add(r);
+  pipeline.add(r, relay?.url ? trimSlash(relay.url) : null);
   // Profiles can reveal bots ("…_bot"): check whoever would count for an app or a zap.
   if ((r.appKey || r.zap) && !profilesChecked.has(r.actor)) profileQueue.add(r.actor);
 }
@@ -125,17 +128,27 @@ function heartbeat() {
     started: startedAt,
     relays: connectedRelays(),
     relaysTotal: RELAYS.length,
+    relayStates: ALL_RELAYS.map((relay) => ({ relay, connected: upRelays().has(relay) })),
   });
 }
 
-function connectedRelays() {
+function upRelays() {
   try {
-    const up = new Set(ndk.pool.connectedRelays().map((r) => trimSlash(r.url)));
-    return RELAYS.filter((u) => up.has(trimSlash(u))).length;
+    return new Set(ndk.pool.connectedRelays().map((r) => trimSlash(r.url)));
   } catch {
-    return 0;
+    return new Set();
   }
 }
+
+function connectedRelays() {
+  const up = upRelays();
+  return RELAYS.filter((u) => up.has(trimSlash(u))).length;
+}
+
+// A copy of an event another relay already delivered: which relays carry what, and how fast.
+const onDup = (ev, relay, delayMs) => {
+  if (relay?.url) pipeline.delivered(ev.id, trimSlash(relay.url), delayMs);
+};
 
 async function main() {
   const mode = DRY_RUN ? " (dry run)" : "";
@@ -165,7 +178,8 @@ async function main() {
   const since = Math.floor(Date.now() / 1000);
   ndk
     .subscribe({ kinds: WATCHED_KINDS, since }, { closeOnEose: false, groupable: false })
-    .on("event", (ev) => handleEvent(ev));
+    .on("event", (ev, relay) => handleEvent(ev, relay))
+    .on("event:dup", onDup);
   ndk
     .subscribe(
       { kinds: ZAPSTORE_KINDS, since },
@@ -175,7 +189,8 @@ async function main() {
         relaySet: NDKRelaySet.fromRelayUrls([ZAPSTORE_RELAY], ndk),
       }
     )
-    .on("event", (ev) => handleEvent(ev, "Zapstore"));
+    .on("event", (ev, relay) => handleEvent(ev, relay, "Zapstore"))
+    .on("event:dup", onDup);
 
   setInterval(checkProfiles, 5000);
   setInterval(tick, FLUSH_MS);

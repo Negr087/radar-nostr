@@ -46,11 +46,20 @@ On startup it preloads ~500 kind 31990 listings (to recognize zaps to apps) and 
 - `components/TvMode.js`: kiosk / TV mode (`/?tv`): full screen, rotating between the bubbles, the ranking (24 h by users and by sats) and the zap stream. `/?tv=45` sets the seconds per view, `/?tv=zaps` (or `bubbles`, `ranking`) stays on one. Remote or keyboard: ← → change view, OK / Enter pauses, F (or double click) goes full screen. It keeps the screen awake where the browser allows it.
 - `app/app/[name]/`: each app's own page (`/app/primal`) with its numbers, today's rank, a 24 h chart, how many users come back (day over day and week over week), the other apps its users also use, its platform split (from client names like "Primal iOS"; apps don't send versions), a weekday × hour heatmap (`components/Heatmap.js`) and its own share image, rebuilt at most every 5 minutes (`lib/appPage.js` loads the data). `/?app=primal` opens that app's details on the radar.
 
+- `app/state/` / `lib/statePage.js`: State of Nostr (`/state`), the whole network instead of one app: active users (24 h, 7 and 30 days), events, zaps and apps in use with the trend vs. the day before, day-by-day charts (from `network_daily`, worked out every night), the category mix, the most used apps and a weekday × hour heatmap.
+- `app/flows/` / `lib/flowsPage.js`: app flows (`/flows`): users who left one app and started using another, this week vs. the week before, as a flow diagram (`components/Sankey.js`, layout in `lib/sankey.js`), a list of the biggest moves and a per-app table (stayed, from / to other apps, new, went quiet). Worked out in the database every 6 hours (`refresh_app_flows`); each app's page shows where its users came from and went.
+- `app/relays/` / `lib/relaysPage.js`: relays (`/relays`): for each relay the worker listens to, whether it's connected, its share of the counted events, how often it's the first or the only one to deliver one, its average delay behind the fastest relay, and a relay × app grid of where each app's events show up.
+- `components/SiteNav.js`: the section links shared by the radar and those pages.
+
 ## Worker (v2)
 
 `worker/` listens to the relays 24/7 with the same engine as the page and stores aggregated
 counts in Supabase every minute (schema in `supabase/schema.sql`). Events wait 5 minutes
 before being counted, so accounts caught by the rate-based bot filter don't make it in.
+
+It also records which relays delivered each counted event, which one was first and how
+late the others were (`relay_activity`, `relay_app_activity`), and which relays it's
+connected to (`relay_status`), for the relays page.
 
 After every flush that went through it updates a heartbeat (`worker_status`); the page warns
 "counter offline" when it's more than 5 minutes old. If no events arrive for 10 minutes

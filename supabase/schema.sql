@@ -87,6 +87,47 @@ alter table platform_activity enable row level security;
 drop policy if exists "public read" on platform_activity;
 create policy "public read" on platform_activity for select using (true);
 
+-- Per relay: the counted events it delivered (`events`), how many it delivered before any
+-- other relay (`fastest`; every event has exactly one, so their sum is all events), how
+-- many no other relay delivered (`solo`), and the total delay of the copies it delivered
+-- after another relay (`lag_ms`, each capped at a minute; there are events - fastest).
+create table if not exists relay_activity (
+  bucket timestamptz not null,
+  relay text not null,
+  events integer not null default 0,
+  fastest integer not null default 0,
+  solo integer not null default 0,
+  lag_ms bigint not null default 0,
+  primary key (bucket, relay)
+);
+
+-- Per relay and app: the app's counted events that relay delivered.
+create table if not exists relay_app_activity (
+  bucket timestamptz not null,
+  relay text not null,
+  app_key text not null,
+  events integer not null default 0,
+  primary key (bucket, relay, app_key)
+);
+
+-- Whether the worker is connected to each relay right now, and since when.
+create table if not exists relay_status (
+  relay text primary key,
+  connected boolean not null,
+  since timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table relay_activity enable row level security;
+alter table relay_app_activity enable row level security;
+alter table relay_status enable row level security;
+drop policy if exists "public read" on relay_activity;
+drop policy if exists "public read" on relay_app_activity;
+drop policy if exists "public read" on relay_status;
+create policy "public read" on relay_activity for select using (true);
+create policy "public read" on relay_app_activity for select using (true);
+create policy "public read" on relay_status for select using (true);
+
 -- For the user overlap and retention functions below.
 create index if not exists app_authors_app_bucket on app_authors (app_key, bucket);
 create index if not exists app_authors_author on app_authors (author);
@@ -94,7 +135,8 @@ create index if not exists app_authors_author on app_authors (author);
 -- Worker: adds one flush worth of counts (increments, so several flushes can share a bucket).
 -- rows: {"apps":[{bucket,app_key,events}], "zaps":[{bucket,app_key,zaps,sats}],
 --        "categories":[{bucket,category,events}], "authors":[{bucket,app_key,author,trusted?}],
---        "platforms":[{bucket,app_key,platform,events}], "app_info":[{app_key,name,website,icon}]}
+--        "platforms":[{bucket,app_key,platform,events}], "app_info":[{app_key,name,website,icon}],
+--        "relays":[{bucket,relay,events,fastest,solo,lag_ms}], "relay_apps":[{bucket,relay,app_key,events}]}
 create or replace function add_activity(rows jsonb) returns void
 language sql as $$
   insert into app_activity (bucket, app_key, events)
@@ -128,6 +170,22 @@ language sql as $$
   from jsonb_array_elements(coalesce(rows->'platforms', '[]')) r
   on conflict (bucket, app_key, platform) do update
     set events = platform_activity.events + excluded.events;
+
+  insert into relay_activity (bucket, relay, events, fastest, solo, lag_ms)
+  select (r->>'bucket')::timestamptz, r->>'relay', (r->>'events')::int, (r->>'fastest')::int,
+         (r->>'solo')::int, (r->>'lag_ms')::bigint
+  from jsonb_array_elements(coalesce(rows->'relays', '[]')) r
+  on conflict (bucket, relay) do update
+    set events = relay_activity.events + excluded.events,
+        fastest = relay_activity.fastest + excluded.fastest,
+        solo = relay_activity.solo + excluded.solo,
+        lag_ms = relay_activity.lag_ms + excluded.lag_ms;
+
+  insert into relay_app_activity (bucket, relay, app_key, events)
+  select (r->>'bucket')::timestamptz, r->>'relay', r->>'app_key', (r->>'events')::int
+  from jsonb_array_elements(coalesce(rows->'relay_apps', '[]')) r
+  on conflict (bucket, relay, app_key) do update
+    set events = relay_app_activity.events + excluded.events;
 
   insert into apps (app_key, name, website, icon)
   select r->>'app_key', r->>'name', r->>'website', r->>'icon'
@@ -354,6 +412,21 @@ begin
   delete from platform_activity where bucket < cutoff;
   insert into platform_activity select * from rolled_platforms;
 
+  create temp table rolled_relays on commit drop as
+    select date_trunc('hour', bucket) as bucket, relay, sum(events)::integer as events,
+           sum(fastest)::integer as fastest, sum(solo)::integer as solo, sum(lag_ms)::bigint as lag_ms
+    from relay_activity where bucket < cutoff group by 1, 2;
+  delete from relay_activity where bucket < cutoff;
+  insert into relay_activity (bucket, relay, events, fastest, solo, lag_ms)
+    select bucket, relay, events, fastest, solo, lag_ms from rolled_relays;
+
+  create temp table rolled_relay_apps on commit drop as
+    select date_trunc('hour', bucket) as bucket, relay, app_key, sum(events)::integer as events
+    from relay_app_activity where bucket < cutoff group by 1, 2, 3;
+  delete from relay_app_activity where bucket < cutoff;
+  insert into relay_app_activity (bucket, relay, app_key, events)
+    select bucket, relay, app_key, events from rolled_relay_apps;
+
   create temp table rolled_authors on commit drop as
     select date_trunc('hour', bucket) as bucket, app_key, author, bool_or(trusted) as trusted
     from app_authors where bucket < cutoff group by 1, 2, 3;
@@ -482,6 +555,341 @@ language sql stable as $$
   order by 2 desc;
 $$;
 
--- Runs the rollup every day at 04:17 UTC (pg_cron; scheduling the same name again updates it).
+
+-- Worker: which relays it's connected to, after every heartbeat. rows: [{relay, connected}].
+-- `since` moves only when a relay connects or drops.
+create or replace function relay_heartbeat(rows jsonb) returns void
+language sql as $$
+  insert into relay_status (relay, connected, since, updated_at)
+  select r->>'relay', (r->>'connected')::boolean, now(), now()
+  from jsonb_array_elements(rows) r
+  on conflict (relay) do update
+    set since = case when relay_status.connected = excluded.connected then relay_status.since
+                     else now() end,
+        connected = excluded.connected,
+        updated_at = now();
+$$;
+
+revoke execute on function relay_heartbeat(jsonb) from public, anon, authenticated;
+grant execute on function relay_heartbeat(jsonb) to service_role;
+
+-- Page (/relays): each relay over the last `minutes`: counted events it delivered, how many
+-- it delivered first and alone, the total delay of its late copies, plus `total`, every
+-- counted event in the same buckets (to tell what share of the traffic each one carries),
+-- and whether the worker is connected to it now. Relays the worker listens to but that
+-- delivered nothing come back with zeros.
+create or replace function relay_stats(minutes integer default 1440)
+returns table (relay text, events bigint, fastest bigint, solo bigint, lag_ms bigint,
+               total bigint, connected boolean, since timestamptz, status_age_seconds integer)
+language sql stable as $$
+  with r as (
+    select ra.relay, sum(ra.events)::bigint as events, sum(ra.fastest)::bigint as fastest,
+           sum(ra.solo)::bigint as solo, sum(ra.lag_ms)::bigint as lag_ms
+    from relay_activity ra
+    where ra.bucket > now() - make_interval(mins => minutes)
+    group by ra.relay
+  )
+  select coalesce(r.relay, s.relay), coalesce(r.events, 0), coalesce(r.fastest, 0),
+         coalesce(r.solo, 0), coalesce(r.lag_ms, 0),
+         (select coalesce(sum(fastest), 0) from r)::bigint,
+         s.connected, s.since, extract(epoch from now() - s.updated_at)::integer
+  from r full join relay_status s on s.relay = r.relay
+  order by 2 desc;
+$$;
+
+-- Page (/relays): for the `max_apps` most active apps over the last `minutes`, how many of
+-- their counted events each relay delivered, and `app_total`, the app's counted events
+-- since relays were recorded (the share each relay reaches).
+create or replace function relay_app_matrix(minutes integer default 1440, max_apps integer default 12)
+returns table (relay text, app_key text, name text, website text, icon text, events bigint,
+               app_total bigint)
+language sql stable as $$
+  with w as (
+    select greatest(now() - make_interval(mins => minutes),
+                    (select min(bucket) from relay_activity)) as t
+  ), top as (
+    select a.app_key, sum(a.events)::bigint as total
+    from app_activity a, w
+    where a.bucket >= w.t
+    group by a.app_key
+    order by 2 desc
+    limit max_apps
+  )
+  select x.relay, t.app_key, coalesce(i.name, t.app_key), i.website, i.icon,
+         sum(x.events)::bigint, t.total
+  from top t
+  join relay_app_activity x on x.app_key = t.app_key
+  cross join w
+  left join apps i on i.app_key = t.app_key
+  where x.bucket >= w.t
+  group by x.relay, t.app_key, i.name, i.website, i.icon, t.total;
+$$;
+
+-- App flows (/flows): users who left one app and started using another, comparing the
+-- last `window_days` with the `window_days` before (complete buckets only). Worked out
+-- every 6 hours by refresh_app_flows() and kept here, so the pages read them instantly.
+-- from_key = '' means not seen on any app the period before (new to the radar); to_key = ''
+-- means not seen on any app since (went quiet). Flows of fewer than 3 users aren't stored.
+create table if not exists app_flows (
+  from_key text not null,
+  to_key text not null,
+  users integer not null,
+  primary key (from_key, to_key)
+);
+
+-- Per app, for the same two periods: users before, users after, and how many stayed.
+create table if not exists app_flow_totals (
+  app_key text primary key,
+  users_before integer not null,
+  users_after integer not null,
+  users_kept integer not null
+);
+
+-- When the flows were worked out, the periods they compare, every user seen in each, and
+-- the share of each period's buckets the worker stored (an outage makes a period look emptier).
+create table if not exists flows_status (
+  id integer primary key default 1 check (id = 1),
+  computed_at timestamptz not null,
+  window_start timestamptz not null,
+  window_mid timestamptz not null,
+  window_end timestamptz not null,
+  users_before integer not null,
+  users_after integer not null,
+  users_kept integer not null,
+  coverage_before real not null,
+  coverage_after real not null
+);
+
+alter table app_flows enable row level security;
+alter table app_flow_totals enable row level security;
+alter table flows_status enable row level security;
+drop policy if exists "public read" on app_flows;
+drop policy if exists "public read" on app_flow_totals;
+drop policy if exists "public read" on flows_status;
+create policy "public read" on app_flows for select using (true);
+create policy "public read" on app_flow_totals for select using (true);
+create policy "public read" on flows_status for select using (true);
+
+-- A user "moved from A to B" when they used A the period before and not since, and B since
+-- and not before. Someone who left A for B and C counts in both flows. Only trusted users.
+create or replace function refresh_app_flows(window_days integer default 7)
+returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  e timestamptz := to_timestamp(floor(extract(epoch from now() - interval '6 minutes') / 600) * 600);
+  mid timestamptz := e - make_interval(days => window_days);
+  s timestamptz := e - make_interval(days => 2 * window_days);
+begin
+  create temp table flow_users on commit drop as
+    select app_key, author, bool_or(bucket < mid) as was, bool_or(bucket >= mid) as now_
+    from app_authors
+    where trusted and bucket >= s and bucket < e
+    group by app_key, author;
+  create temp table flow_anyone on commit drop as
+    select author, bool_or(was) as was, bool_or(now_) as now_ from flow_users group by author;
+
+  delete from app_flows where true;
+  insert into app_flows (from_key, to_key, users)
+  select f, t, n from (
+    select l.app_key as f, j.app_key as t, count(*)::integer as n
+    from flow_users l
+    join flow_users j on j.author = l.author and j.app_key <> l.app_key
+    where l.was and not l.now_ and j.now_ and not j.was
+    group by 1, 2
+    union all
+    select l.app_key, '', count(*)::integer
+    from flow_users l join flow_anyone a on a.author = l.author
+    where l.was and not l.now_ and not a.now_
+    group by 1
+    union all
+    select '', j.app_key, count(*)::integer
+    from flow_users j join flow_anyone a on a.author = j.author
+    where j.now_ and not j.was and not a.was
+    group by 2
+  ) x
+  where n >= 3;
+
+  delete from app_flow_totals where true;
+  insert into app_flow_totals (app_key, users_before, users_after, users_kept)
+  select app_key, count(*) filter (where was), count(*) filter (where now_),
+         count(*) filter (where was and now_)
+  from flow_users group by app_key;
+
+  insert into flows_status (id, computed_at, window_start, window_mid, window_end, users_before,
+                            users_after, users_kept, coverage_before, coverage_after)
+  select 1, now(), s, mid, e,
+         (select count(*) filter (where was) from flow_anyone),
+         (select count(*) filter (where now_) from flow_anyone),
+         (select count(*) filter (where was and now_) from flow_anyone),
+         (select count(distinct bucket) filter (where bucket < mid) from category_activity
+           where bucket >= s and bucket < e)::real / (window_days * 144),
+         (select count(distinct bucket) filter (where bucket >= mid) from category_activity
+           where bucket >= s and bucket < e)::real / (window_days * 144)
+  on conflict (id) do update
+    set computed_at = excluded.computed_at, window_start = excluded.window_start,
+        window_mid = excluded.window_mid, window_end = excluded.window_end,
+        users_before = excluded.users_before, users_after = excluded.users_after,
+        users_kept = excluded.users_kept, coverage_before = excluded.coverage_before,
+        coverage_after = excluded.coverage_after;
+end;
+$$;
+
+revoke execute on function refresh_app_flows(integer) from public, anon, authenticated;
+
+-- Page (/flows): the biggest flows between two apps (both known), with their display info.
+create or replace function top_flows(max_rows integer default 30)
+returns table (from_key text, from_name text, from_icon text, to_key text, to_name text,
+               to_icon text, users integer)
+language sql stable as $$
+  select f.from_key, coalesce(a.name, f.from_key), a.icon,
+         f.to_key, coalesce(b.name, f.to_key), b.icon, f.users
+  from app_flows f
+  left join apps a on a.app_key = f.from_key
+  left join apps b on b.app_key = f.to_key
+  where f.from_key <> '' and f.to_key <> ''
+  order by f.users desc
+  limit max_rows;
+$$;
+
+-- Page (/flows): per app, users before and after, how many stayed, how many arrived from
+-- or left for another app, how many were new to the radar or went quiet. Biggest first.
+create or replace function app_flow_summary(max_rows integer default 30)
+returns table (app_key text, name text, icon text, users_before integer, users_after integer,
+               users_kept integer,
+               gained integer, lost integer, arrived_new integer, went_quiet integer)
+language sql stable as $$
+  select t.app_key, coalesce(i.name, t.app_key), i.icon, t.users_before, t.users_after, t.users_kept,
+         coalesce((select sum(users) from app_flows where to_key = t.app_key and from_key <> ''), 0)::integer,
+         coalesce((select sum(users) from app_flows where from_key = t.app_key and to_key <> ''), 0)::integer,
+         coalesce((select users from app_flows where to_key = t.app_key and from_key = ''), 0),
+         coalesce((select users from app_flows where from_key = t.app_key and to_key = ''), 0)
+  from app_flow_totals t
+  left join apps i on i.app_key = t.app_key
+  order by greatest(t.users_before, t.users_after) desc
+  limit max_rows;
+$$;
+
+-- App page: the apps an app gained users from (direction 'in') and lost users to ('out').
+create or replace function app_switches(key text, max_rows integer default 5)
+returns table (direction text, app_key text, name text, icon text, users integer)
+language sql stable as $$
+  (select 'in', f.from_key, coalesce(i.name, f.from_key), i.icon, f.users
+   from app_flows f left join apps i on i.app_key = f.from_key
+   where f.to_key = key and f.from_key <> ''
+   order by f.users desc limit max_rows)
+  union all
+  (select 'out', f.to_key, coalesce(i.name, f.to_key), i.icon, f.users
+   from app_flows f left join apps i on i.app_key = f.to_key
+   where f.from_key = key and f.to_key <> ''
+   order by f.users desc limit max_rows);
+$$;
+
+-- State of Nostr (/state): one row per complete UTC day, worked out after the nightly
+-- rollup by refresh_network_daily(). `users`: different trusted accounts seen on any app
+-- that day (and over the 7 / 30 days up to it); `events`: every counted event; `apps`:
+-- apps with at least 10 events; `coverage`: share of the day's hours the worker stored.
+create table if not exists network_daily (
+  day date primary key,
+  users integer not null,
+  users_7d integer not null,
+  users_30d integer not null,
+  events bigint not null,
+  zaps integer not null,
+  sats bigint not null,
+  apps integer not null,
+  coverage real not null
+);
+
+alter table network_daily enable row level security;
+drop policy if exists "public read" on network_daily;
+create policy "public read" on network_daily for select using (true);
+
+-- Works out the last `days` complete days (again, if they were already there). Days with
+-- nothing counted get no row.
+create or replace function refresh_network_daily(days integer default 3)
+returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  today date := (now() at time zone 'UTC')::date;
+  d date;
+  t0 timestamptz;
+  t1 timestamptz;
+begin
+  for d in select generate_series(today - days, today - 1, interval '1 day')::date loop
+    t0 := d::timestamp at time zone 'UTC';
+    t1 := t0 + interval '1 day';
+    -- Days before the radar existed (or with the counter down all day) are left out.
+    continue when not exists (select 1 from category_activity where bucket >= t0 and bucket < t1);
+    insert into network_daily (day, users, users_7d, users_30d, events, zaps, sats, apps, coverage)
+    values (
+      d,
+      (select count(distinct author) from app_authors where trusted and bucket >= t0 and bucket < t1),
+      (select count(distinct author) from app_authors
+        where trusted and bucket >= t1 - interval '7 days' and bucket < t1),
+      (select count(distinct author) from app_authors
+        where trusted and bucket >= t1 - interval '30 days' and bucket < t1),
+      (select coalesce(sum(events), 0) from category_activity where bucket >= t0 and bucket < t1),
+      (select coalesce(sum(zaps), 0) from zap_activity where bucket >= t0 and bucket < t1),
+      (select coalesce(sum(sats), 0) from zap_activity where bucket >= t0 and bucket < t1),
+      (select count(*) from (select app_key from app_activity where bucket >= t0 and bucket < t1
+                             group by app_key having sum(events) >= 10) x),
+      (select count(distinct date_trunc('hour', bucket)) from category_activity
+        where bucket >= t0 and bucket < t1)::real / 24
+    )
+    on conflict (day) do update
+      set users = excluded.users, users_7d = excluded.users_7d, users_30d = excluded.users_30d,
+          events = excluded.events, zaps = excluded.zaps, sats = excluded.sats,
+          apps = excluded.apps, coverage = excluded.coverage;
+  end loop;
+end;
+$$;
+
+revoke execute on function refresh_network_daily(integer) from public, anon, authenticated;
+
+-- State of Nostr: the last 24 h and the 24 h before, live: users, events, zaps, apps with
+-- 10+ events, users over 7 days, and the share of each 24 h the worker stored (trends are
+-- only shown when both are nearly complete).
+create or replace function network_summary()
+returns table (users_day bigint, users_prev bigint, users_week bigint, events_day bigint,
+               events_prev bigint, zaps_day bigint, sats_day bigint, sats_prev bigint,
+               apps_day bigint, coverage_day real, coverage_prev real)
+language sql stable security definer set search_path = public as $$
+  with u as (
+    select author, bool_or(bucket > now() - interval '24 hours') as d0,
+           bool_or(bucket > now() - interval '48 hours' and bucket <= now() - interval '24 hours') as d1
+    from app_authors
+    where trusted and bucket > now() - interval '48 hours'
+    group by author
+  )
+  select (select count(*) filter (where d0) from u),
+         (select count(*) filter (where d1) from u),
+         (select count(distinct author) from app_authors
+           where trusted and bucket > now() - interval '7 days'),
+         (select coalesce(sum(events) filter (where bucket > now() - interval '24 hours'), 0)
+           from category_activity where bucket > now() - interval '48 hours')::bigint,
+         (select coalesce(sum(events) filter (where bucket <= now() - interval '24 hours'), 0)
+           from category_activity where bucket > now() - interval '48 hours')::bigint,
+         (select coalesce(sum(zaps), 0) from zap_activity where bucket > now() - interval '24 hours')::bigint,
+         (select coalesce(sum(sats) filter (where bucket > now() - interval '24 hours'), 0)
+           from zap_activity where bucket > now() - interval '48 hours')::bigint,
+         (select coalesce(sum(sats) filter (where bucket <= now() - interval '24 hours'), 0)
+           from zap_activity where bucket > now() - interval '48 hours')::bigint,
+         (select count(*) from (select app_key from app_activity
+            where bucket > now() - interval '24 hours' group by app_key having sum(events) >= 10) x),
+         (select count(distinct bucket) filter (where bucket > now() - interval '24 hours')
+           from category_activity where bucket > now() - interval '48 hours')::real / 144,
+         (select count(distinct bucket) filter (where bucket <= now() - interval '24 hours')
+           from category_activity where bucket > now() - interval '48 hours')::real / 144;
+$$;
+
+-- Scheduled jobs (pg_cron; scheduling the same name again updates it): the rollup every
+-- day at 04:17 UTC, the daily network numbers right after it, the app flows every 6 hours.
 create extension if not exists pg_cron;
 select cron.schedule('radar-rollup', '17 4 * * *', 'select rollup_old_buckets()');
+select cron.schedule('radar-network-daily', '37 4 * * *', 'select refresh_network_daily()');
+select cron.schedule('radar-flows', '23 */6 * * *', 'select refresh_app_flows()');
+
+-- First run, so the pages have something before the jobs do: the days the radar already
+-- has (up to 60) and the current flows. Harmless to run again; it takes a little while.
+select refresh_network_daily(60);
+select refresh_app_flows();

@@ -11,6 +11,7 @@ import { buildRows, isEmpty, mergeRows } from "./aggregate.js";
 // `isTrusted` (optional, worker/wot.js): whether each author counts as a user.
 export function createPipeline({ engine, db, hashAuthor, isTrusted, holdMs, stallMs, log = () => {} }) {
   let pending = []; // classified records waiting out holdMs
+  const byId = new Map(); // event id -> pending record, to add the relays that deliver it later
   let unsent = null; // rows from a failed flush, retried next time
   let lastEventAt = Date.now();
   const totals = { events: 0, counted: 0, droppedBots: 0, flushes: 0, failures: 0 };
@@ -30,8 +31,19 @@ export function createPipeline({ engine, db, hashAuthor, isTrusted, holdMs, stal
       lastEventAt = now;
     },
 
-    add(record) {
+    // `relay`: the url of the relay that delivered it first, when known.
+    add(record, relay) {
+      if (relay) record.relays = { [relay]: 0 };
       pending.push(record);
+      if (record.id) byId.set(record.id, record);
+    },
+
+    // The same event again from another relay, `delayMs` after the first copy. Ignored
+    // when the event wasn't counted (bot, duplicate) or has already been flushed.
+    delivered(id, relay, delayMs) {
+      const record = byId.get(id);
+      if (!record || !relay || !record.relays || relay in record.relays) return;
+      record.relays[relay] = Math.max(1, Math.round(delayMs) || 1);
     },
 
     stalled(now = Date.now()) {
@@ -44,6 +56,7 @@ export function createPipeline({ engine, db, hashAuthor, isTrusted, holdMs, stal
       engine.checkRates(now);
       const ready = final ? pending : pending.filter((r) => now - r.t >= holdMs);
       pending = final ? [] : pending.filter((r) => now - r.t < holdMs);
+      for (const r of ready) byId.delete(r.id);
       // Also drops apps blocked (in the database) while their records were waiting.
       const clean = ready.filter((r) => !engine.isBotItem(r) && !isBlockedAppKey(r.appKey));
       totals.droppedBots += ready.length - clean.length;
@@ -80,10 +93,15 @@ export function createPipeline({ engine, db, hashAuthor, isTrusted, holdMs, stal
 
     // Tells the page the stored counts are up to date. Skipped while a flush is waiting to
     // be retried: then the counts aren't up to date, and the page should notice.
-    async heartbeat(status) {
+    // `status.relayStates` (optional): [{relay, connected}], stored apart, so a database
+    // without the relay table still gets the heartbeat.
+    async heartbeat({ relayStates, ...status }) {
       if (!db || unsent) return false;
       try {
         await db.heartbeat(status);
+        if (relayStates && db.relayStatus) {
+          await db.relayStatus(relayStates).catch((err) => log("relay status failed:", err.message));
+        }
         return true;
       } catch (err) {
         log("heartbeat failed:", err.message);

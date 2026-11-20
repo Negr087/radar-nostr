@@ -9,6 +9,7 @@ import AppDetail from "@/components/AppDetail";
 import Bubbles from "@/components/Bubbles";
 import Feed from "@/components/Feed";
 import Pulse from "@/components/Pulse";
+import SiteNav from "@/components/SiteNav";
 import Ranking from "@/components/Ranking";
 import TvMode, { parseTv } from "@/components/TvMode";
 import Zaps from "@/components/Zaps";
@@ -85,11 +86,7 @@ export default function Home() {
         </div>
       </header>
 
-      <nav className="site-nav" aria-label="Sections">
-        <a href="/" className="active" aria-current="page"><span aria-hidden="true">◉</span> Live radar</a>
-        <a href="/compare"><span aria-hidden="true">⇄</span> Compare apps</a>
-        <a href="/?tv"><span aria-hidden="true">▣</span> TV mode</a>
-      </nav>
+      <SiteNav active="/" />
 
       <section className="grid">
         <div className="panel">
