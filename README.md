@@ -75,11 +75,13 @@ npm run worker         # DRY_RUN=1 npm run worker prints what it would send, wri
 ```bash
 git clone https://github.com/Negr087/radar-nostr.git && cd radar-nostr
 cp .env.example .env && nano .env && chmod 600 .env   # paste the secret key
-docker compose -f worker/docker-compose.yml up -d --build
-docker logs -f radar-nostr-worker                     # first "flushed" after ~6 min
+sudo docker compose -f worker/docker-compose.yml up -d --build
+sudo docker logs -f radar-nostr-worker                # first "flushed" after ~6 min
 ```
 
-Update: `git pull && docker compose -f worker/docker-compose.yml up -d --build`.
+Update: `git pull && sudo docker compose -f worker/docker-compose.yml up -d --build`.
+On Umbrel the `umbrel` user can't reach Docker without `sudo` ("permission denied while
+trying to connect to the docker API"); drop it on hosts where your user is in the `docker` group.
 Run only one worker at a time: two would count every event twice.
 
 Unique users: for each app and bucket the worker also stores who posted, as a salted hash
