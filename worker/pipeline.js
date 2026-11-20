@@ -38,12 +38,14 @@ export function createPipeline({ engine, db, hashAuthor, isTrusted, holdMs, stal
       if (record.id) byId.set(record.id, record);
     },
 
-    // The same event again from another relay, `delayMs` after the first copy. Ignored
-    // when the event wasn't counted (bot, duplicate) or has already been flushed.
-    delivered(id, relay, delayMs) {
+    // The same event again from another relay, `delayMs` after the first copy (if not
+    // given: since the record arrived). Ignored when the event wasn't counted (bot,
+    // duplicate) or has already been flushed.
+    delivered(id, relay, delayMs, now = Date.now()) {
       const record = byId.get(id);
       if (!record || !relay || !record.relays || relay in record.relays) return;
-      record.relays[relay] = Math.max(1, Math.round(delayMs) || 1);
+      const delay = delayMs ?? now - record.t;
+      record.relays[relay] = Math.max(1, Math.round(delay) || 1);
     },
 
     stalled(now = Date.now()) {

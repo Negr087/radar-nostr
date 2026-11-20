@@ -136,3 +136,47 @@ test("sankeyLayout stacks nodes and gives bands matching edges", () => {
   assert.equal(bx.ty1, right[0].y1);
   assert.deepEqual(sankeyLayout([], {}), { left: [], right: [], links: [] });
 });
+
+test("a copy of an event with no delay given counts from when it arrived", async () => {
+  const sent = [];
+  const engine = { checkRates: () => false, isBotItem: () => false, lookupApp };
+  const db = { addActivity: async (rows) => sent.push(rows), heartbeat: async () => {} };
+  const p = createPipeline({ engine, db, holdMs: 1000, stallMs: 1 });
+  p.add({ id: "e2", t: T, cat: "social" }, A);
+  p.delivered("e2", B, undefined, T + 800);
+  await p.flush({ now: T + 2000 });
+  assert.equal(sent[0].relays.find((r) => r.relay === B).lag_ms, 800);
+});
+
+const fakeRelay = ({ status, wsState, retry = false }) => {
+  const relay = {
+    status,
+    connects: 0,
+    connectivity: {
+      reconnectTimeout: retry ? 1 : undefined,
+      ws: wsState == null ? undefined : { readyState: wsState },
+      set _status(v) {
+        relay.status = v;
+      },
+    },
+    connect: async () => {
+      relay.connects++;
+    },
+  };
+  return relay;
+};
+
+test("revive reconnects only relays NDK left down with nothing scheduled", async () => {
+  const { isAbandoned, revive } = await import("../worker/relayKeeper.js");
+  const up = fakeRelay({ status: 5, wsState: 1 });
+  const retrying = fakeRelay({ status: 1, wsState: 3, retry: true });
+  const connecting = fakeRelay({ status: 4, wsState: 0 });
+  const gaveUp = fakeRelay({ status: 1, wsState: 3 });
+  const flapping = fakeRelay({ status: 3, wsState: 3 });
+  const never = fakeRelay({ status: 1 });
+  const all = [up, retrying, connecting, gaveUp, flapping, never];
+  assert.deepEqual(all.map(isAbandoned), [false, false, false, true, true, true]);
+  assert.equal(revive(all), 3);
+  assert.deepEqual(all.map((r) => r.connects), [0, 0, 0, 1, 1, 1]);
+  assert.equal(flapping.status, 1); // reset so NDK's connect() runs
+});

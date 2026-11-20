@@ -18,6 +18,7 @@ import {
 } from "../lib/relays.js";
 import { authorHasher } from "./aggregate.js";
 import { createPipeline } from "./pipeline.js";
+import { revive } from "./relayKeeper.js";
 import { createSupabase } from "./supabase.js";
 import { DEFAULT_SEEDS, createTrust } from "./wot.js";
 
@@ -31,6 +32,11 @@ const PROFILES_CHECKED_MAX = 50000;
 // Relays send something every few seconds; this much silence means the connections died
 // without NDK noticing. The worker exits and Docker (restart: unless-stopped) starts it again.
 const STALL_MS = Number(process.env.STALL_MS) || 10 * 60 * 1000;
+// How often to reconnect relays NDK gave up on, and how far back to ask after a reconnect
+// (events from the gap; the ones already seen are skipped).
+const REVIVE_MS = 60 * 1000;
+const RESUBSCRIBE_OVERLAP_S = 60;
+const RESUBSCRIBE_DEBOUNCE_MS = 5000;
 // Follow lists change slowly: the web of trust is rebuilt once a day.
 const WOT_REFRESH_MS = 24 * 60 * 60 * 1000;
 // Seed accounts for the web of trust (hex pubkeys, comma separated), see worker/wot.js.
@@ -85,9 +91,15 @@ const ALL_RELAYS = [...RELAYS, ZAPSTORE_RELAY].map(trimSlash);
 function handleEvent(ev, relay, viaClient) {
   pipeline.seen();
   // Live only, filed under arrival time (more reliable than other people's clocks).
+  const url = relay?.url ? trimSlash(relay.url) : null;
   const r = engine.classify(ev, { now: Date.now(), viaClient });
-  if (!r) return;
-  pipeline.add(r, relay?.url ? trimSlash(relay.url) : null);
+  if (!r) {
+    // Already seen: after the live subscriptions restart, the first copy of an event
+    // may come through here instead of as a duplicate.
+    if (url) pipeline.delivered(ev.id, url);
+    return;
+  }
+  pipeline.add(r, url);
   // Profiles can reveal bots ("…_bot"): check whoever would count for an app or a zap.
   if ((r.appKey || r.zap) && !profilesChecked.has(r.actor)) profileQueue.add(r.actor);
 }
@@ -150,11 +162,49 @@ const onDup = (ev, relay, delayMs) => {
   if (relay?.url) pipeline.delivered(ev.id, trimSlash(relay.url), delayMs);
 };
 
+// The live subscriptions: everything on the relays we listen to, plus Zapstore's relay.
+let liveSubs = [];
+let resubscribeTimer = null;
+const relayStats = { revived: 0, resubscribed: 0 };
+
+function startLive(since) {
+  for (const sub of liveSubs) sub.stop();
+  liveSubs = [
+    ndk
+      .subscribe({ kinds: WATCHED_KINDS, since }, { closeOnEose: false, groupable: false })
+      .on("event", (ev, relay) => handleEvent(ev, relay))
+      .on("event:dup", onDup),
+    ndk
+      .subscribe(
+        { kinds: ZAPSTORE_KINDS, since },
+        {
+          closeOnEose: false,
+          groupable: false,
+          relaySet: NDKRelaySet.fromRelayUrls([ZAPSTORE_RELAY], ndk),
+        }
+      )
+      .on("event", (ev, relay) => handleEvent(ev, relay, "Zapstore"))
+      .on("event:dup", onDup),
+  ];
+}
+
+// NDK doesn't send running subscriptions again to a relay that reconnects: start them over
+// (once for a burst of reconnects), asking for the last minute so the gap isn't lost.
+function onRelayConnect() {
+  if (!liveSubs.length || resubscribeTimer) return;
+  resubscribeTimer = setTimeout(() => {
+    resubscribeTimer = null;
+    relayStats.resubscribed++;
+    startLive(Math.floor(Date.now() / 1000) - RESUBSCRIBE_OVERLAP_S);
+  }, RESUBSCRIBE_DEBOUNCE_MS);
+}
+
 async function main() {
   const mode = DRY_RUN ? " (dry run)" : "";
   log(`starting${mode} · ${RELAYS.length} relays · flush every ${FLUSH_MS / 1000}s`);
   await ndk.connect(5000).catch(() => {});
   log(`connected to ${connectedRelays()}/${RELAYS.length} relays`);
+  ndk.pool.on("relay:connect", onRelayConnect);
 
   // App listings first, so zaps to apps are recognized from the start. Registered as they
   // arrive, waiting at most 15 s: relays that never answer would otherwise block forever.
@@ -175,22 +225,10 @@ async function main() {
   log(blocks == null ? "blocklist not loaded, using the built-in one" : `blocklist: ${blocks} entries`);
 
   // No backfill: counting only from now on avoids double counting after a restart.
-  const since = Math.floor(Date.now() / 1000);
-  ndk
-    .subscribe({ kinds: WATCHED_KINDS, since }, { closeOnEose: false, groupable: false })
-    .on("event", (ev, relay) => handleEvent(ev, relay))
-    .on("event:dup", onDup);
-  ndk
-    .subscribe(
-      { kinds: ZAPSTORE_KINDS, since },
-      {
-        closeOnEose: false,
-        groupable: false,
-        relaySet: NDKRelaySet.fromRelayUrls([ZAPSTORE_RELAY], ndk),
-      }
-    )
-    .on("event", (ev, relay) => handleEvent(ev, relay, "Zapstore"))
-    .on("event:dup", onDup);
+  startLive(Math.floor(Date.now() / 1000));
+  setInterval(() => {
+    relayStats.revived += revive(ndk.pool.relays.values());
+  }, REVIVE_MS);
 
   setInterval(checkProfiles, 5000);
   setInterval(tick, FLUSH_MS);
@@ -203,7 +241,8 @@ async function main() {
       `status · relays ${connectedRelays()}/${RELAYS.length} · events ${totals.events}` +
         ` · counted ${totals.counted} · tagged ${tagged} · new apps ${newApps}` +
         ` · bots ${botEvents + totals.droppedBots} · flushes ${totals.flushes}` +
-        ` · failures ${totals.failures} · trusted ${trust.size}`
+        ` · failures ${totals.failures} · trusted ${trust.size}` +
+        ` · relay reconnects ${relayStats.revived} · resubscribes ${relayStats.resubscribed}`
     );
   }, 10 * 60 * 1000);
 }
